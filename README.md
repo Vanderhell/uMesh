@@ -6,7 +6,7 @@
 [![Language: C99](https://img.shields.io/badge/language-C99-blue.svg)](#)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](#)
 [![Platform](https://img.shields.io/badge/platform-ESP32%20%7C%20ESP32--S3%20%7C%20ESP32--C3-lightgrey.svg)](#)
-[![Status: Design](https://img.shields.io/badge/status-design%20phase-orange.svg)](#)
+[![Status: v1.0.0](https://img.shields.io/badge/status-v1.0.0-brightgreen.svg)](#)
 
 ---
 
@@ -207,12 +207,13 @@ Spotreba sleep:   závisí od aplikácie
 ```
 ✓ Protokol navrhnutý
 ✓ Dokumentácia
-□ Implementácia PHY vrstvy (raw 802.11)
-□ Implementácia MAC vrstvy
-□ Implementácia Network vrstvy
-□ Implementácia Security vrstvy
-□ ESP32 port
-□ Príklady
+✓ Implementácia PHY vrstvy (raw 802.11)
+✓ Implementácia MAC vrstvy
+✓ Implementácia Network vrstvy
+✓ Implementácia Security vrstvy
+✓ ESP32 port
+✓ Príklady
+✓ Unit testy (9/9 passing)
 ```
 
 ---
