@@ -60,3 +60,11 @@ add_executable(test_mac
 )
 target_include_directories(test_mac PRIVATE ../src ../include ../port/posix)
 add_test(NAME test_mac COMMAND test_mac)
+
+# ── test_routing ─────────────────────────────────────────
+add_executable(test_routing
+    test_routing.c
+    ../src/net/routing.c
+)
+target_include_directories(test_routing PRIVATE ../src)
+add_test(NAME test_routing COMMAND test_routing)
