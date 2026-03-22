@@ -13,6 +13,8 @@ uint8_t        net_get_node_id(void);
 uint8_t        net_get_state(void);
 uint8_t        net_get_node_count(void);
 void           net_tick(uint32_t now_ms);
+void           net_set_rx_callback(void (*cb)(const umesh_frame_t *frame,
+                                               int8_t rssi));
 void           net_on_frame(const umesh_frame_t *frame, int8_t rssi);
 
 #endif /* UMESH_NET_H */

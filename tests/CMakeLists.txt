@@ -68,3 +68,26 @@ add_executable(test_routing
 )
 target_include_directories(test_routing PRIVATE ../src)
 add_test(NAME test_routing COMMAND test_routing)
+
+# ── test_net ─────────────────────────────────────────────
+add_executable(test_net
+    test_net.c
+    ../src/net/net.c
+    ../src/net/routing.c
+    ../src/net/discovery.c
+    ../src/mac/mac.c
+    ../src/mac/cca.c
+    ../src/mac/frame.c
+    ../src/common/crc.c
+    ../src/common/ring.c
+    ../src/phy/phy.c
+    ../src/sec/sec.c
+    ../src/sec/keys.c
+    ../port/posix/phy_posix.c
+)
+target_include_directories(test_net PRIVATE ../src ../include ../port/posix)
+if(UMESH_USE_MICROCRYPT)
+    target_compile_definitions(test_net PRIVATE UMESH_USE_MICROCRYPT=1)
+    target_link_libraries(test_net PRIVATE microcrypt)
+endif()
+add_test(NAME test_net COMMAND test_net)
