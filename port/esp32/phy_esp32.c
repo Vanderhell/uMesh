@@ -1,7 +1,12 @@
 /*
  * ESP32 PHY port — raw 802.11
- * Implemented in Step 15.
- * This file will not compile without ESP-IDF.
+ *
+ * RX path uses a FreeRTOS queue + dedicated task so that frame
+ * processing (including MAC-layer ACK sending) runs outside the
+ * WiFi promiscuous callback context.  Calling esp_wifi_80211_tx()
+ * from within the promiscuous callback deadlocks the WiFi driver.
+ *
+ * Pattern: KNOWN_ISSUES.md ESP-04 (watchdog and promiscuous callback).
  */
 #ifdef UMESH_PORT_ESP32
 
@@ -9,10 +14,27 @@
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_netif.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/queue.h"
+#include "freertos/task.h"
 #include <string.h>
 
+/* ── RX queue configuration ────────────────────────────────────────────── */
+#define RX_QUEUE_DEPTH   8
+#define RX_TASK_STACK    4096
+#define RX_TASK_PRIORITY 5
+
+typedef struct {
+    uint8_t  data[UMESH_MAX_FRAME_SIZE];
+    uint16_t len;
+    int8_t   rssi;
+} rx_item_t;
+
+/* ── State ─────────────────────────────────────────────────────────────── */
 static void (*s_rx_cb)(const uint8_t*, uint8_t, int8_t) = NULL;
-static uint8_t s_net_id = 0;
+static uint8_t       s_net_id   = 0;
+static QueueHandle_t s_rx_queue = NULL;
+static TaskHandle_t  s_rx_task  = NULL;
 
 /* 802.11 Data frame header template */
 static const uint8_t S_80211_HDR[24] = {
@@ -24,6 +46,27 @@ static const uint8_t S_80211_HDR[24] = {
     0x00, 0x00                                   /* Sequence control    */
 };
 
+/* ── RX processing task ─────────────────────────────────────────────────
+ * Runs at RX_TASK_PRIORITY, blocked on the queue.
+ * Called from this task context → esp_wifi_80211_tx() is safe here.
+ */
+static void rx_task(void *arg)
+{
+    rx_item_t item;
+    (void)arg;
+
+    while (1) {
+        if (xQueueReceive(s_rx_queue, &item, portMAX_DELAY) == pdTRUE) {
+            if (s_rx_cb) {
+                s_rx_cb(item.data, item.len, item.rssi);
+            }
+        }
+    }
+}
+
+/* ── Promiscuous callback (IRAM — called from WiFi task) ────────────────
+ * Must return quickly.  Only filter + enqueue; never call TX here.
+ */
 static void IRAM_ATTR promisc_cb(void *buf,
                                   wifi_promiscuous_pkt_type_t type)
 {
@@ -32,21 +75,41 @@ static void IRAM_ATTR promisc_cb(void *buf,
     wifi_promiscuous_pkt_t *pkt = (wifi_promiscuous_pkt_t *)buf;
     uint8_t *frame = pkt->payload;
 
-    /* Quick filter: uMesh prefix + NET_ID */
+    /* Quick filter: µMesh BSSID prefix + NET_ID */
     if (frame[16] != 0xAC) return;
     if (frame[17] != 0x00) return;
     if (frame[18] != s_net_id) return;
 
-    if (s_rx_cb) {
-        s_rx_cb(&frame[24],
-                (uint8_t)(pkt->rx_ctrl.sig_len - 24),
-                pkt->rx_ctrl.rssi);
-    }
+    int32_t payload_len = (int32_t)pkt->rx_ctrl.sig_len - 24;
+    if (payload_len <= 0 || payload_len > UMESH_MAX_FRAME_SIZE) return;
+
+    /* Use a static item buffer — callback is not re-entrant on ESP32 */
+    static rx_item_t item;
+    memcpy(item.data, &frame[24], (size_t)payload_len);
+    item.len  = (uint16_t)payload_len;
+    item.rssi = pkt->rx_ctrl.rssi;
+
+    BaseType_t hp_woken = pdFALSE;
+    xQueueSendFromISR(s_rx_queue, &item, &hp_woken);
+    if (hp_woken) portYIELD_FROM_ISR();
 }
+
+/* ── HAL API ────────────────────────────────────────────────────────────  */
 
 umesh_result_t phy_hal_init(const umesh_phy_cfg_t *cfg)
 {
     s_net_id = cfg->net_id;
+
+    /* Create RX queue and processing task before enabling promiscuous */
+    s_rx_queue = xQueueCreate(RX_QUEUE_DEPTH, sizeof(rx_item_t));
+    if (!s_rx_queue) return UMESH_ERR_HARDWARE;
+
+    if (xTaskCreate(rx_task, "umesh_rx", RX_TASK_STACK,
+                    NULL, RX_TASK_PRIORITY, &s_rx_task) != pdPASS) {
+        vQueueDelete(s_rx_queue);
+        s_rx_queue = NULL;
+        return UMESH_ERR_HARDWARE;
+    }
 
     esp_netif_init();
     esp_event_loop_create_default();
@@ -94,6 +157,15 @@ void phy_hal_deinit(void)
     esp_wifi_set_promiscuous(false);
     esp_wifi_stop();
     esp_wifi_deinit();
+
+    if (s_rx_task) {
+        vTaskDelete(s_rx_task);
+        s_rx_task = NULL;
+    }
+    if (s_rx_queue) {
+        vQueueDelete(s_rx_queue);
+        s_rx_queue = NULL;
+    }
     s_rx_cb = NULL;
 }
 
