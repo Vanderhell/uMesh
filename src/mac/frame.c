@@ -19,7 +19,7 @@
  */
 
 umesh_result_t frame_serialize(const umesh_frame_t *frame,
-                               uint8_t *buf, uint8_t buf_size,
+                               uint8_t *buf, uint16_t buf_size,
                                uint8_t *out_len)
 {
     uint8_t total;

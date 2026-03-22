@@ -9,7 +9,7 @@
  */
 
 #define POSIX_LOOPBACK_BUF_SIZE  256
-#define POSIX_SIMULATED_RSSI     (-60)
+#define POSIX_SIMULATED_RSSI     (-90)   /* below CCA threshold (-85) = channel free */
 
 static void (*s_rx_cb)(const uint8_t*, uint8_t, int8_t) = NULL;
 static uint8_t  s_loopback_buf[POSIX_LOOPBACK_BUF_SIZE];

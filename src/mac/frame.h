@@ -11,7 +11,7 @@
 #define UMESH_FRAME_HEADER_SIZE  9
 
 umesh_result_t frame_serialize(const umesh_frame_t *frame,
-                               uint8_t *buf, uint8_t buf_size,
+                               uint8_t *buf, uint16_t buf_size,
                                uint8_t *out_len);
 
 umesh_result_t frame_deserialize(const uint8_t *buf, uint8_t len,

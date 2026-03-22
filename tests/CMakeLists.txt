@@ -46,3 +46,17 @@ add_executable(test_posix_loopback
 )
 target_include_directories(test_posix_loopback PRIVATE ../src)
 add_test(NAME test_posix_loopback COMMAND test_posix_loopback)
+
+# ── test_mac ─────────────────────────────────────────────
+add_executable(test_mac
+    test_mac.c
+    ../src/mac/mac.c
+    ../src/mac/cca.c
+    ../src/mac/frame.c
+    ../src/common/crc.c
+    ../src/common/ring.c
+    ../src/phy/phy.c
+    ../port/posix/phy_posix.c
+)
+target_include_directories(test_mac PRIVATE ../src ../include ../port/posix)
+add_test(NAME test_mac COMMAND test_mac)

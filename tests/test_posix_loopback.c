@@ -62,7 +62,7 @@ static void test_loopback_rssi(void)
     phy_hal_set_rx_cb(rx_cb);
 
     phy_hal_send(data, sizeof(data));
-    TEST_ASSERT(s_rx_rssi == -60, "loopback: simulated RSSI == -60 dBm");
+    TEST_ASSERT(s_rx_rssi == -90, "loopback: simulated RSSI == -90 dBm (below CCA threshold)");
 }
 
 static void test_loopback_multiple(void)
