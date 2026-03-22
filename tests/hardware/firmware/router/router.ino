@@ -9,7 +9,7 @@
  */
 
 #include <Arduino.h>
-#include "umesh.h"
+#include "../../../../include/umesh.h"
 
 /* ── Network configuration ─────────────────────────────────────────────── */
 #define NET_ID     0x01
