@@ -15,3 +15,12 @@ add_executable(test_ring
 )
 target_include_directories(test_ring PRIVATE ../src)
 add_test(NAME test_ring COMMAND test_ring)
+
+# ── test_frame ───────────────────────────────────────────
+add_executable(test_frame
+    test_frame.c
+    ../src/mac/frame.c
+    ../src/common/crc.c
+)
+target_include_directories(test_frame PRIVATE ../src)
+add_test(NAME test_frame COMMAND test_frame)
