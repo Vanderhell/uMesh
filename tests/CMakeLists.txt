@@ -24,3 +24,17 @@ add_executable(test_frame
 )
 target_include_directories(test_frame PRIVATE ../src)
 add_test(NAME test_frame COMMAND test_frame)
+
+# ── test_sec ─────────────────────────────────────────────
+add_executable(test_sec
+    test_sec.c
+    ../src/sec/sec.c
+    ../src/sec/keys.c
+    ../src/common/crc.c
+)
+target_include_directories(test_sec PRIVATE ../src)
+if(UMESH_USE_MICROCRYPT)
+    target_compile_definitions(test_sec PRIVATE UMESH_USE_MICROCRYPT=1)
+    target_link_libraries(test_sec PRIVATE microcrypt)
+endif()
+add_test(NAME test_sec COMMAND test_sec)
