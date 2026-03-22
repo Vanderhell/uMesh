@@ -38,3 +38,11 @@ if(UMESH_USE_MICROCRYPT)
     target_link_libraries(test_sec PRIVATE microcrypt)
 endif()
 add_test(NAME test_sec COMMAND test_sec)
+
+# ── test_posix_loopback ──────────────────────────────────
+add_executable(test_posix_loopback
+    test_posix_loopback.c
+    ../port/posix/phy_posix.c
+)
+target_include_directories(test_posix_loopback PRIVATE ../src)
+add_test(NAME test_posix_loopback COMMAND test_posix_loopback)
