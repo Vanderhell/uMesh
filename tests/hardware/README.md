@@ -32,7 +32,9 @@ The coordinator assigns NODE_IDs during the JOIN phase.
 
 ## Step 1 — Install µMesh as an Arduino library
 
-Copy (or symlink) the µMesh repository into your Arduino libraries folder:
+The repository contains `library.properties`, so Arduino recognises it
+as a library automatically. Copy (or symlink) the µMesh repository into
+your Arduino libraries folder:
 
 ```
 # Windows
@@ -42,8 +44,11 @@ xcopy /E /I "C:\Users\<you>\Desktop\µMesh" "%USERPROFILE%\Documents\Arduino\lib
 cp -r /path/to/umesh ~/Arduino/libraries/umesh
 ```
 
-The Arduino IDE must see `umesh/include/umesh.h` and the source files
-under `umesh/src/`.
+After copying, the Arduino IDE must see:
+- `libraries/umesh/library.properties`
+- `libraries/umesh/src/umesh.h`  ← shim that re-exports the public API
+- `libraries/umesh/include/umesh.h`
+- `libraries/umesh/src/` — all source files
 
 ---
 
