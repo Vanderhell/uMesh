@@ -48,6 +48,11 @@ static volatile uint8_t  s_pong_src         = 0;
 static volatile uint32_t s_nodes_joined     = 0;   /* bitmask */
 static volatile bool     s_ack_received     = false;
 
+/* ── JOIN→ASSIGN state ─────────────────────────────────────────────────── */
+static uint8_t           s_next_node_id     = 2;   /* assign from 0x02 up */
+static volatile bool     s_pending_assign   = false;
+static volatile uint8_t  s_pending_assign_id = 0;
+
 /* ── Internal counters ─────────────────────────────────────────────────── */
 static uint32_t s_test_rx_count  = 0;
 static uint32_t s_test_tx_count  = 0;
@@ -115,10 +120,13 @@ static void on_receive(umesh_pkt_t *pkt) {
         s_pong_received = true;   /* processed in main task */
     }
 
-    if (pkt->cmd == UMESH_CMD_NODE_JOINED && pkt->payload_len >= 1) {
-        uint8_t new_id = pkt->payload[0];
-        s_nodes_joined |= (1u << new_id);
-        json_joined(new_id);
+    /* library discovery.c does not auto-respond to JOIN when called from
+     * firmware — handle it here: set a flag, main task sends ASSIGN */
+    if (pkt->cmd == UMESH_CMD_JOIN &&
+        pkt->src == UMESH_ADDR_UNASSIGNED &&
+        !s_pending_assign) {
+        s_pending_assign_id = s_next_node_id++;
+        s_pending_assign    = true;
     }
 
     s_test_rx_count++;
@@ -298,7 +306,8 @@ void setup(void) {
 
     json_ready();
 
-    /* Wait until both router and end_node have joined */
+    /* Wait until both router and end_node have joined.
+     * While waiting, process any pending JOIN→ASSIGN handshake. */
     uint32_t mask = (1u << NODE_ROUTER) | (1u << NODE_ENDNODE);
     uint32_t t0 = millis();
     while ((s_nodes_joined & mask) != mask) {
@@ -308,7 +317,21 @@ void setup(void) {
                            "\"msg\":\"join timeout — not all nodes joined\"}}");
             return;
         }
-        delay(100);
+
+        if (s_pending_assign) {
+            uint8_t id = s_pending_assign_id;
+            s_pending_assign = false;
+            /* Broadcast ASSIGN so the node (src=0xFE) receives it
+             * regardless of whether it is directly reachable */
+            uint8_t payload[1] = { id };
+            json_tx(UMESH_ADDR_BROADCAST, UMESH_CMD_ASSIGN, 1);
+            umesh_send(UMESH_ADDR_BROADCAST, UMESH_CMD_ASSIGN,
+                       payload, 1, 0);
+            s_nodes_joined |= (1u << id);
+            json_joined(id);
+        }
+
+        delay(50);
     }
 
     delay(500);   /* settle */

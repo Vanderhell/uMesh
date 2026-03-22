@@ -21,9 +21,13 @@ static const uint8_t MASTER_KEY[16] = {
     0xAB, 0xF7, 0x15, 0x88, 0x09, 0xCF, 0x4F, 0x3C
 };
 
-/* ── Pending response (set in RX callback, sent in loop) ───────────────── */
-static volatile bool    s_send_pong  = false;
-static volatile uint8_t s_pong_dst   = 0;
+/* ── Pending responses (set in RX callback, sent in loop) ─────────────── */
+static volatile bool    s_send_pong      = false;
+static volatile uint8_t s_pong_dst       = 0;
+
+/* ASSIGN forwarding: re-broadcast ASSIGN so out-of-range nodes get it */
+static volatile bool    s_forward_assign    = false;
+static volatile uint8_t s_assign_payload    = 0;
 
 /* ── JSON helpers ──────────────────────────────────────────────────────── */
 
@@ -58,9 +62,15 @@ static void on_receive(umesh_pkt_t *pkt) {
     json_rx(pkt->src, pkt->cmd, pkt->rssi);
 
     if (pkt->cmd == UMESH_CMD_PING) {
-        /* Schedule PONG — will be sent from loop() */
         s_pong_dst  = pkt->src;
         s_send_pong = true;
+    }
+
+    /* ASSIGN forwarding: coordinator sends ASSIGN broadcast; router
+     * re-broadcasts it so end_node gets it even if out of direct range */
+    if (pkt->cmd == UMESH_CMD_ASSIGN && pkt->payload_len >= 1) {
+        s_assign_payload    = pkt->payload[0];
+        s_forward_assign    = true;
     }
 }
 
@@ -111,6 +121,14 @@ void loop(void) {
         json_tx(dst, UMESH_CMD_PONG, 0);
         umesh_result_t r = umesh_send_cmd(dst, UMESH_CMD_PONG, 0);
         if (r != UMESH_OK) json_error(r);
+    }
+
+    /* Re-broadcast ASSIGN so out-of-range end_node can receive it */
+    if (s_forward_assign) {
+        s_forward_assign = false;
+        uint8_t payload[1] = { s_assign_payload };
+        json_tx(UMESH_ADDR_BROADCAST, UMESH_CMD_ASSIGN, 1);
+        umesh_send(UMESH_ADDR_BROADCAST, UMESH_CMD_ASSIGN, payload, 1, 0);
     }
 
     delay(5);
