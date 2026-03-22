@@ -8,6 +8,10 @@
 /* Pull in common definitions */
 #include "../src/common/defs.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* ── Public types ──────────────────────────── */
 
 typedef struct {
@@ -72,5 +76,9 @@ void umesh_on_cmd(uint8_t cmd, void (*cb)(umesh_pkt_t *pkt));
 umesh_info_t  umesh_get_info(void);
 umesh_stats_t umesh_get_stats(void);
 const char   *umesh_err_str(umesh_result_t err);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* UMESH_H */
