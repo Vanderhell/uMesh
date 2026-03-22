@@ -43,7 +43,7 @@ if(UMESH_PORT STREQUAL "esp32")
     target_sources(umesh PRIVATE port/esp32/phy_esp32.c)
 else()
     target_sources(umesh PRIVATE port/posix/phy_posix.c)
-    message(STATUS "uMesh: POSIX port (testovanie)")
+    message(STATUS "uMesh: POSIX port (testing)")
 endif()
 
 option(UMESH_BUILD_TESTS "Build tests" ON)

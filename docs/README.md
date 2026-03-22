@@ -39,23 +39,23 @@ ESP-NOW is a great idea — but it has fundamental limitations:
 
 ```
 Zigbee / Thread:
-  ✗ Require a special radio chip (802.15.4)
-  ✗ Complex — hundreds of KB of code
-  ✗ Difficult integration
-  ✗ Certification required
+  - Require a special radio chip (802.15.4)
+  - Complex — hundreds of KB of code
+  - Difficult integration
+  - Certification required
 
 µMesh:
-  ✓ Runs on the ESP32 you already have
-  ✓ Lightweight — tens of KB
-  ✓ #include and go
-  ✓ MIT license
+  + Runs on the ESP32 you already have
+  + Lightweight — tens of KB
+  + #include and go
+  + MIT license
 ```
 
 ---
 
 ## How it works
 
-µMesh sends its own packets directly through the WiFi hardware using `esp_wifi_80211_tx()` — no association, no AP, no DHCP. It receives through promiscuous mode. The WiFi antenna becomes a **general-purpose radio transmitter** for the protocol.
+µMesh sends packets directly through the WiFi hardware using `esp_wifi_80211_tx()` — no association, no AP, no DHCP. It receives through promiscuous mode. The WiFi antenna becomes a **general-purpose radio transmitter** for the protocol.
 
 ```
 Standard ESP32 WiFi stack:
@@ -84,15 +84,9 @@ umesh_cfg_t cfg = {
     .channel    = 6,
 };
 
-void on_temp(umesh_pkt_t *pkt) {
-    float t = *(float *)pkt->payload;
-    printf("Temperature: %.1f C\n", t);
-}
-
 void app_main(void) {
     umesh_init(&cfg);
     umesh_start();
-    umesh_on_cmd(UMESH_CMD_SENSOR_TEMP, on_temp);
 
     float temp = 23.5f;
     umesh_send(0x02, UMESH_CMD_SENSOR_TEMP,
@@ -107,7 +101,6 @@ void app_main(void) {
 ```
 +---------------------------------------------+
 |              APPLICATION LAYER              |
-|           umesh_send / receive              |
 +---------------------------------------------+
 |             NETWORK LAYER                   |
 |      addressing, routing, multi-hop         |
@@ -117,86 +110,26 @@ void app_main(void) {
 +------------------+--------------------------+
 |  SECURITY LAYER  |      FEC LAYER           |
 |  AES-128 CTR     |    Hamming(7,4)          |
-|  HMAC-SHA256     |                          |
 +------------------+--------------------------+
 |             PHYSICAL LAYER                  |
-|    Raw IEEE 802.11 frames / ESP32 WiFi      |
-|    esp_wifi_80211_tx / Promiscuous mode     |
+|    Raw IEEE 802.11 / ESP32 WiFi HAL         |
 +---------------------------------------------+
 ```
-
----
-
-## Performance
-
-```
-Range:            ~200 m (direct link)
-                  ~500 m+ (multi-hop, 3 hops)
-Latency:          ~1-5 ms (1 hop)
-Data rate:        tens of kbps (raw 802.11)
-Max nodes:        16 per network
-Max hops:         15
-TX current:       ~80 mA @ 3.3V
-RX current:       ~60 mA @ 3.3V
-```
-
----
-
-## Comparison
-
-| | µMesh | ESP-NOW | Zigbee | BLE Mesh | LoRa |
-|---|---|---|---|---|---|
-| Range | 200m+ | 200m | 100m | 30m | 10km |
-| Multi-hop | ✓ | ✗ | ✓ | ✓ | ✗ |
-| Extra HW | ✗ | ✗ | ✓ | ✗ | ✓ |
-| Open source | ✓ | ✗ | ~ | ~ | ✓ |
-| C99 embedded | ✓ | ✗ | ✗ | ✗ | ~ |
-| Zero deps | ✓ | ✗ | ✗ | ✗ | ✗ |
-| Mesh routing | ✓ | ✗ | ✓ | ✓ | ✗ |
-
----
-
-## Hardware
-
-µMesh runs on **any ESP32** you already have:
-
-| Chip | Support | Notes |
-|---|---|---|
-| ESP32 (classic) | ✓ | Full support |
-| ESP32-S3 | ✓ | Recommended |
-| ESP32-C3 | ✓ | Cheapest (~EUR 3) |
-| ESP32-S2 | ✓ | Single-core |
-
-**No extra hardware.** Just ESP32 + power supply.
-
----
-
-## Documentation
-
-| Document | Content |
-|---|---|
-| [DESIGN.md](docs/DESIGN.md) | Architectural decisions and rationale |
-| [PHYSICAL_LAYER.md](docs/PHYSICAL_LAYER.md) | Raw 802.11, promiscuous mode, ESP32 WiFi API |
-| [MAC_LAYER.md](docs/MAC_LAYER.md) | CSMA/CA, ACK, backoff, collisions |
-| [NETWORK_LAYER.md](docs/NETWORK_LAYER.md) | Routing, discovery, multi-hop |
-| [SECURITY_LAYER.md](docs/SECURITY_LAYER.md) | AES-128 CTR, HMAC, replay protection |
-| [IMPLEMENTATION.md](docs/IMPLEMENTATION.md) | C99 structure, project layout |
-| [KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | Known issues and limitations |
 
 ---
 
 ## micro-toolkit Integration
 
 µMesh uses **microcrypt** for cryptographic primitives (AES-128, HMAC-SHA256).
-Other micro-toolkit libraries are optional and can be integrated if needed:
+Other micro-toolkit libraries are optional:
 
-| Library | Role in µMesh |
+| Library | Role |
 |---|---|
 | `microcrypt` | AES-128, HMAC-SHA256 — **used** |
 | `microfsm` | Network layer FSM (optional) |
-| `microlog` | Structured packet/RSSI logging (optional) |
+| `microlog` | Structured logging (optional) |
 | `iotspool` | Store-and-forward over µMesh (optional) |
-| `microwdt` | Watchdog for protocol stack task (optional) |
+| `microwdt` | Watchdog for protocol stack (optional) |
 | `microtest` | Unit test framework (optional) |
 
 ---
