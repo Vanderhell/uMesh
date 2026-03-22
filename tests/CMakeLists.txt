@@ -7,3 +7,11 @@ add_executable(test_crc
 )
 target_include_directories(test_crc PRIVATE ../src)
 add_test(NAME test_crc COMMAND test_crc)
+
+# ── test_ring ────────────────────────────────────────────
+add_executable(test_ring
+    test_ring.c
+    ../src/common/ring.c
+)
+target_include_directories(test_ring PRIVATE ../src)
+add_test(NAME test_ring COMMAND test_ring)
