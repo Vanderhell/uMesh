@@ -26,7 +26,7 @@
 #define TX_POWER      52        /* ~13 dBm */
 #define NODE_ROUTER   0x02
 #define NODE_ENDNODE  0x03
-#define NODES_NEEDED  2         /* wait for router + end_node */
+/* Nodes use hardcoded IDs (0x02=router, 0x03=end_node) — no JOIN wait */
 
 static const uint8_t MASTER_KEY[16] = {
     0x2B, 0x7E, 0x15, 0x16, 0x28, 0xAE, 0xD2, 0xA6,
@@ -45,13 +45,6 @@ static const uint8_t MASTER_KEY[16] = {
 static volatile bool     s_pong_received    = false;
 static volatile int8_t   s_last_rssi        = 0;
 static volatile uint8_t  s_pong_src         = 0;
-static volatile uint32_t s_nodes_joined     = 0;   /* bitmask */
-static volatile bool     s_ack_received     = false;
-
-/* ── JOIN→ASSIGN state ─────────────────────────────────────────────────── */
-static uint8_t           s_next_node_id     = 2;   /* assign from 0x02 up */
-static volatile bool     s_pending_assign   = false;
-static volatile uint8_t  s_pending_assign_id = 0;
 
 /* ── Internal counters ─────────────────────────────────────────────────── */
 static uint32_t s_test_rx_count  = 0;
@@ -63,12 +56,6 @@ static void json_ready(void) {
     Serial.printf("{\"event\":\"ready\","
                   "\"data\":{\"role\":\"coordinator\","
                   "\"node_id\":1,\"channel\":%d}}\n", CHANNEL);
-}
-
-static void json_joined(uint8_t node_id) {
-    Serial.printf("{\"event\":\"joined\","
-                  "\"data\":{\"node_id\":%u,\"net_id\":%u}}\n",
-                  node_id, NET_ID);
 }
 
 static void json_tx(uint8_t dst, uint8_t cmd, uint8_t size) {
@@ -118,15 +105,6 @@ static void on_receive(umesh_pkt_t *pkt) {
         s_pong_src      = pkt->src;
         s_last_rssi     = pkt->rssi;
         s_pong_received = true;   /* processed in main task */
-    }
-
-    /* library discovery.c does not auto-respond to JOIN when called from
-     * firmware — handle it here: set a flag, main task sends ASSIGN */
-    if (pkt->cmd == UMESH_CMD_JOIN &&
-        pkt->src == UMESH_ADDR_UNASSIGNED &&
-        !s_pending_assign) {
-        s_pending_assign_id = s_next_node_id++;
-        s_pending_assign    = true;
     }
 
     s_test_rx_count++;
@@ -306,35 +284,8 @@ void setup(void) {
 
     json_ready();
 
-    /* Wait until both router and end_node have joined.
-     * While waiting, process any pending JOIN→ASSIGN handshake. */
-    uint32_t mask = (1u << NODE_ROUTER) | (1u << NODE_ENDNODE);
-    uint32_t t0 = millis();
-    while ((s_nodes_joined & mask) != mask) {
-        if ((millis() - t0) > 30000) {
-            Serial.println("{\"event\":\"error\","
-                           "\"data\":{\"code\":-1,"
-                           "\"msg\":\"join timeout — not all nodes joined\"}}");
-            return;
-        }
-
-        if (s_pending_assign) {
-            uint8_t id = s_pending_assign_id;
-            s_pending_assign = false;
-            /* Broadcast ASSIGN so the node (src=0xFE) receives it
-             * regardless of whether it is directly reachable */
-            uint8_t payload[1] = { id };
-            json_tx(UMESH_ADDR_BROADCAST, UMESH_CMD_ASSIGN, 1);
-            umesh_send(UMESH_ADDR_BROADCAST, UMESH_CMD_ASSIGN,
-                       payload, 1, 0);
-            s_nodes_joined |= (1u << id);
-            json_joined(id);
-        }
-
-        delay(50);
-    }
-
-    delay(500);   /* settle */
+    /* Nodes have hardcoded IDs — wait for them to announce via ROUTE_UPDATE */
+    delay(3000);
 
     /* Run all 7 tests sequentially */
     test_connectivity();
@@ -350,6 +301,6 @@ void setup(void) {
 }
 
 void loop(void) {
-    /* All work is done in setup(); nothing needed here */
-    delay(1000);
+    umesh_tick(millis());
+    delay(100);
 }

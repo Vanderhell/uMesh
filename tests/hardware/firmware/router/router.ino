@@ -25,10 +25,6 @@ static const uint8_t MASTER_KEY[16] = {
 static volatile bool    s_send_pong      = false;
 static volatile uint8_t s_pong_dst       = 0;
 
-/* ASSIGN forwarding: re-broadcast ASSIGN so out-of-range nodes get it */
-static volatile bool    s_forward_assign    = false;
-static volatile uint8_t s_assign_payload    = 0;
-
 /* ── JSON helpers ──────────────────────────────────────────────────────── */
 
 static void json_ready(uint8_t node_id) {
@@ -65,13 +61,6 @@ static void on_receive(umesh_pkt_t *pkt) {
         s_pong_dst  = pkt->src;
         s_send_pong = true;
     }
-
-    /* ASSIGN forwarding: coordinator sends ASSIGN broadcast; router
-     * re-broadcasts it so end_node gets it even if out of direct range */
-    if (pkt->cmd == UMESH_CMD_ASSIGN && pkt->payload_len >= 1) {
-        s_assign_payload    = pkt->payload[0];
-        s_forward_assign    = true;
-    }
 }
 
 /* ── Arduino entry points ──────────────────────────────────────────────── */
@@ -82,7 +71,7 @@ void setup(void) {
 
     umesh_cfg_t cfg = {
         .net_id     = NET_ID,
-        .node_id    = UMESH_ADDR_UNASSIGNED,   /* assigned by coordinator */
+        .node_id    = 0x02,
         .master_key = MASTER_KEY,
         .role       = UMESH_ROLE_ROUTER,
         .security   = UMESH_SEC_FULL,
@@ -98,7 +87,7 @@ void setup(void) {
     r = umesh_start();
     if (r != UMESH_OK) { json_error(r); return; }
 
-    /* umesh_start() triggers JOIN — block until connected */
+    /* pre-assigned node_id — connects immediately */
     uint32_t t0 = millis();
     while (umesh_get_info().state != UMESH_STATE_CONNECTED) {
         if ((millis() - t0) > 15000) {
@@ -114,6 +103,8 @@ void setup(void) {
 }
 
 void loop(void) {
+    umesh_tick(millis());
+
     /* Process pending PONG response */
     if (s_send_pong) {
         s_send_pong = false;
@@ -121,14 +112,6 @@ void loop(void) {
         json_tx(dst, UMESH_CMD_PONG, 0);
         umesh_result_t r = umesh_send_cmd(dst, UMESH_CMD_PONG, 0);
         if (r != UMESH_OK) json_error(r);
-    }
-
-    /* Re-broadcast ASSIGN so out-of-range end_node can receive it */
-    if (s_forward_assign) {
-        s_forward_assign = false;
-        uint8_t payload[1] = { s_assign_payload };
-        json_tx(UMESH_ADDR_BROADCAST, UMESH_CMD_ASSIGN, 1);
-        umesh_send(UMESH_ADDR_BROADCAST, UMESH_CMD_ASSIGN, payload, 1, 0);
     }
 
     delay(5);

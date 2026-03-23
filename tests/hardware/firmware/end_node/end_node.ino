@@ -88,7 +88,7 @@ void setup(void) {
 
     umesh_cfg_t cfg = {
         .net_id     = NET_ID,
-        .node_id    = UMESH_ADDR_UNASSIGNED,
+        .node_id    = 0x03,
         .master_key = MASTER_KEY,
         .role       = UMESH_ROLE_END_NODE,
         .security   = UMESH_SEC_FULL,
@@ -104,7 +104,7 @@ void setup(void) {
     r = umesh_start();
     if (r != UMESH_OK) { json_error(r); return; }
 
-    /* Block until joined */
+    /* pre-assigned node_id — connects immediately */
     uint32_t t0 = millis();
     while (umesh_get_info().state != UMESH_STATE_CONNECTED) {
         if ((millis() - t0) > 15000) {
@@ -120,6 +120,8 @@ void setup(void) {
 }
 
 void loop(void) {
+    umesh_tick(millis());
+
     /* Send PONG */
     if (s_send_pong) {
         s_send_pong = false;

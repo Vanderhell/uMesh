@@ -21,6 +21,9 @@ static umesh_state_t s_state      = UMESH_STATE_UNINIT;
 static uint16_t      s_seq_num    = 0;
 static uint32_t      s_last_route_update_ms = 0;
 static uint32_t      s_last_coord_seen_ms   = 0;
+static uint32_t      s_last_join_ms         = 0;
+
+#define UMESH_JOIN_RETRY_MS  1000u
 
 /* Upper layer RX callback */
 static void (*s_net_rx_cb)(const umesh_frame_t *frame, int8_t rssi) = NULL;
@@ -64,6 +67,8 @@ static void on_mac_rx(umesh_frame_t *frame, int8_t rssi)
         if (assigned != UMESH_ADDR_UNASSIGNED) {
             s_node_id = assigned;
             s_state   = UMESH_STATE_CONNECTED;
+            /* Tell MAC layer our real node_id so ACK frames use correct src */
+            mac_set_node_id(assigned);
         }
     }
 
@@ -100,6 +105,29 @@ umesh_result_t net_join(void)
     if (s_role == UMESH_ROLE_COORDINATOR) {
         s_state   = UMESH_STATE_CONNECTED;
         s_node_id = UMESH_ADDR_COORDINATOR;
+        return UMESH_OK;
+    }
+
+    /* Pre-assigned node_id: skip JOIN handshake, go directly to CONNECTED */
+    if (s_node_id != UMESH_ADDR_UNASSIGNED) {
+        s_state = UMESH_STATE_CONNECTED;
+        mac_set_node_id(s_node_id);
+        /* Add direct route to coordinator so unicast sends work immediately */
+        routing_add(UMESH_ADDR_COORDINATOR, UMESH_ADDR_COORDINATOR,
+                    1, UMESH_RSSI_GOOD, 0);
+        /* Announce via ROUTE_UPDATE so coordinator can discover us */
+        {
+            umesh_frame_t ann;
+            memset(&ann, 0, sizeof(ann));
+            ann.net_id    = s_net_id;
+            ann.dst       = UMESH_ADDR_BROADCAST;
+            ann.src       = s_node_id;
+            ann.cmd       = UMESH_CMD_ROUTE_UPDATE;
+            ann.flags     = UMESH_FLAG_PRIO_NORMAL;
+            ann.seq_num   = next_seq();
+            ann.hop_count = UMESH_MAX_HOP_COUNT;
+            mac_send(&ann);
+        }
         return UMESH_OK;
     }
 
@@ -168,6 +196,15 @@ void net_set_rx_callback(void (*cb)(const umesh_frame_t *frame, int8_t rssi))
 void net_tick(uint32_t now_ms)
 {
     routing_expire(now_ms);
+
+    /* JOIN retry — router and end_node only, every 1s while waiting for ASSIGN */
+    if (s_state == UMESH_STATE_JOINING &&
+        s_role != UMESH_ROLE_COORDINATOR) {
+        if (now_ms - s_last_join_ms >= UMESH_JOIN_RETRY_MS) {
+            discovery_join();
+            s_last_join_ms = now_ms;
+        }
+    }
 
     /* ROUTE_UPDATE — only COORDINATOR and ROUTER, every 30s */
     if (s_state == UMESH_STATE_CONNECTED &&
