@@ -115,19 +115,12 @@ umesh_result_t net_join(void)
         /* Add direct route to coordinator so unicast sends work immediately */
         routing_add(UMESH_ADDR_COORDINATOR, UMESH_ADDR_COORDINATOR,
                     1, UMESH_RSSI_GOOD, 0);
-        /* Announce via ROUTE_UPDATE so coordinator can discover us */
-        {
-            umesh_frame_t ann;
-            memset(&ann, 0, sizeof(ann));
-            ann.net_id    = s_net_id;
-            ann.dst       = UMESH_ADDR_BROADCAST;
-            ann.src       = s_node_id;
-            ann.cmd       = UMESH_CMD_ROUTE_UPDATE;
-            ann.flags     = UMESH_FLAG_PRIO_NORMAL;
-            ann.seq_num   = next_seq();
-            ann.hop_count = UMESH_MAX_HOP_COUNT;
-            mac_send(&ann);
-        }
+        /* Schedule ROUTE_UPDATE via net_tick at ~1 s after boot so the
+         * coordinator's promiscuous mode is guaranteed to be active by then.
+         * Trick: set last_update to (0 - (INTERVAL - 1000)) so that
+         * now_ms=1000 triggers the condition now_ms - last >= INTERVAL. */
+        s_last_route_update_ms =
+            (uint32_t)(0u - (UMESH_ROUTE_UPDATE_MS - 1000u));
         return UMESH_OK;
     }
 
@@ -206,9 +199,9 @@ void net_tick(uint32_t now_ms)
         }
     }
 
-    /* ROUTE_UPDATE — only COORDINATOR and ROUTER, every 30s */
-    if (s_state == UMESH_STATE_CONNECTED &&
-        s_role != UMESH_ROLE_END_NODE) {
+    /* ROUTE_UPDATE — all connected nodes, every 30s (end_nodes too so
+     * the coordinator always has a live route to them) */
+    if (s_state == UMESH_STATE_CONNECTED) {
         if (now_ms - s_last_route_update_ms >= UMESH_ROUTE_UPDATE_MS) {
             umesh_frame_t frame;
             memset(&frame, 0, sizeof(frame));
