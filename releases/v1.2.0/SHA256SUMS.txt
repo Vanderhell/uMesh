@@ -1,0 +1,4 @@
+d46300662736859af95de919c6e1615a4e741300b8d2fef981437a2be20586d8  RELEASE_NOTES.md
+b78c2c2e55eac84e180c5aef27e3d614a76838237c05159ef3277c6da787547b  umesh-v1.2.0-gradient-example.zip
+15045bcec2a80a59d9c407a4485f75ffbfa2c70b6bf3c3f5a9332e7cfbc7bbea  umesh-v1.2.0-hardware-firmware.zip
+7a820185d73e0af489c5c1066a9fd0a3e356c89cb7f259e24c3c74c584f4b3ab  umesh-v1.2.0-source.zip

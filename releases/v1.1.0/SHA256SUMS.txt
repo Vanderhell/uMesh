@@ -1,0 +1,3 @@
+2e71e40a574eabefbdc22c6e292cf16eec68c55d169eb634aaa2ec341af79679  RELEASE_NOTES.md
+15045bcec2a80a59d9c407a4485f75ffbfa2c70b6bf3c3f5a9332e7cfbc7bbea  umesh-v1.1.0-hardware-firmware.zip
+7a820185d73e0af489c5c1066a9fd0a3e356c89cb7f259e24c3c74c584f4b3ab  umesh-v1.1.0-source.zip

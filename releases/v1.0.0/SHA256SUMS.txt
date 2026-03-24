@@ -1,0 +1,2 @@
+d267e65a304d3c04c39f7f7a660b062c9271bed760448e8ac9ab0fef6d78461d  RELEASE_NOTES.md
+6a34dffb1f0281df980a6cc5462ba8067ceae0438e0ea70c9c982edcbda3c9fb  umesh-v1.0.0-source.zip
