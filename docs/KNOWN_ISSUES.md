@@ -530,6 +530,32 @@ WiFi + BT degradation    -> document
 
 ---
 
+## Power Management
+
+### ✅ PWR-01 — END_NODE power profiles
+
+Power management is implemented in v1.3.0 with three modes:
+- `UMESH_POWER_ACTIVE`
+- `UMESH_POWER_LIGHT`
+- `UMESH_POWER_DEEP`
+
+`LIGHT` and `DEEP` are intended for `END_NODE` devices.
+
+### ⚪ PWR-02 — Router deep sleep unsupported by design
+
+Routers and coordinator are expected to stay available for forwarding and
+network control traffic. Deep sleep for router/coordinator is rejected by API
+(`umesh_deep_sleep_cycle()` returns `UMESH_ERR_INVALID_DST`).
+
+### ⚪ PWR-03 — Deep sleep requires gradient routing
+
+Deep sleep operation is constrained to gradient deployments where nodes can
+re-establish an uphill path after wake-up.
+`umesh_deep_sleep_cycle()` returns `UMESH_ERR_NOT_ROUTABLE` for
+distance-vector mode.
+
+---
+
 ## Summary — issue status
 
 | ID | Severity | Status | Description |

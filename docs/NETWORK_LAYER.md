@@ -69,6 +69,7 @@ When routing mode is gradient and destination is coordinator:
 - `UMESH_CMD_ELECTION_RESULT` (`0x58`)
 - `UMESH_CMD_GRADIENT_BEACON` (`0x59`)
 - `UMESH_CMD_GRADIENT_UPDATE` (`0x5A`)
+- `UMESH_CMD_POWER_BEACON` (`0x5B`)
 
 ## Timers
 

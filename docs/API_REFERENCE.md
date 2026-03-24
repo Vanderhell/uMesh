@@ -22,6 +22,14 @@ Gradient routing fields:
 - `gradient_jitter_max_ms` (default 200)
 - `on_gradient_ready(uint8_t distance)`
 
+Power management fields:
+- `power_mode` (`UMESH_POWER_ACTIVE`, `UMESH_POWER_LIGHT`, `UMESH_POWER_DEEP`)
+- `light_sleep_interval_ms` (default 1000)
+- `light_listen_window_ms` (default 100)
+- `deep_sleep_tx_interval_ms` (default 30000)
+- `on_sleep(void)`
+- `on_wake(void)`
+
 ## Role and election API
 
 - `umesh_get_role(void)`
@@ -44,6 +52,16 @@ Gradient routing fields:
 
 - `umesh_neighbor_t umesh_get_neighbor(uint8_t index)`
   - returns neighbor diagnostics (`node_id`, `distance`, `rssi`, `last_seen_ms`)
+
+## Power management API
+
+- `umesh_result_t umesh_set_power_mode(umesh_power_mode_t mode)`
+- `umesh_power_mode_t umesh_get_power_mode(void)`
+- `umesh_result_t umesh_deep_sleep_cycle(void)`
+  - returns `UMESH_ERR_NOT_ROUTABLE` when routing is not gradient
+  - returns `UMESH_ERR_INVALID_DST` when role is coordinator/router
+- `float umesh_estimate_current_ma(void)`
+- `umesh_power_stats_t umesh_get_power_stats(void)`
 
 ## Example: sensor node in gradient mode
 

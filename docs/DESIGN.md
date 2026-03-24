@@ -175,6 +175,20 @@ metric = hop_count x 10 + rssi_penalty
 
 ---
 
+## Why sleep is scoped to END_NODE
+
+Power saving is role-dependent:
+
+- Coordinator must stay reachable for joins, route updates, election, and
+  control beacons.
+- Routers must stay available to forward packets for other nodes.
+- End nodes primarily send their own telemetry and can duty-cycle radio usage.
+
+Because of this, `LIGHT` and `DEEP` modes are designed for end nodes and
+validated via API checks.
+
+---
+
 ## micro-toolkit Integration
 
 µMesh is designed to work **standalone** — without any additional dependencies. It also integrates naturally with micro-toolkit libraries:

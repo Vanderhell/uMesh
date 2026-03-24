@@ -6,7 +6,7 @@
 [![Language: C99](https://img.shields.io/badge/language-C99-blue.svg)](#)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](#)
 [![Platform](https://img.shields.io/badge/platform-ESP32%20%7C%20ESP32--S3%20%7C%20ESP32--C3-lightgrey.svg)](#)
-[![Status: v1.2.0](https://img.shields.io/badge/status-v1.2.0-brightgreen.svg)](#)
+[![Status: v1.3.0](https://img.shields.io/badge/status-v1.3.0-brightgreen.svg)](#)
 
 ---
 
@@ -206,6 +206,7 @@ RX current:       ~60 mA @ 3.3V
 | [SECURITY_LAYER.md](docs/SECURITY_LAYER.md) | AES-128 CTR, HMAC, replay protection |
 | [IMPLEMENTATION.md](docs/IMPLEMENTATION.md) | C99 structure, project layout |
 | [KNOWN_ISSUES.md](docs/KNOWN_ISSUES.md) | Known issues and limitations |
+| [POWER_MANAGEMENT.md](docs/POWER_MANAGEMENT.md) | ACTIVE/LIGHT/DEEP power profiles |
 
 ---
 
@@ -238,7 +239,7 @@ Other micro-toolkit libraries are optional and can be integrated if needed:
 + Gradient routing mode for sensor networks
 + ESP32 port
 + Examples
-+ Unit tests (11/11 passing)
++ Unit tests (12/12 passing)
 ```
 
 ---
@@ -246,3 +247,17 @@ Other micro-toolkit libraries are optional and can be integrated if needed:
 ## License
 
 MIT — free for commercial and personal use.
+
+---
+
+## Power Consumption
+
+| Mode | Role | Avg Current | Use Case |
+|------|------|-------------|----------|
+| ACTIVE | Any | ~60-80 mA | Development, always-on |
+| LIGHT | END_NODE | ~8 mA | Battery sensors, periodic check-in |
+| DEEP | END_NODE | ~1-5 mA | Long interval telemetry (30s+) |
+| ACTIVE | ROUTER | ~60 mA | Must stay awake to route packets |
+
+Deep sleep is intended for gradient routing deployments.
+Routers should use ACTIVE mode in production meshes.
