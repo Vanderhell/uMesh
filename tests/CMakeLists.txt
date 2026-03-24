@@ -186,3 +186,28 @@ if(UMESH_USE_MICROCRYPT)
     target_link_libraries(test_power PRIVATE microcrypt)
 endif()
 add_test(NAME test_power COMMAND test_power)
+
+add_executable(test_caps
+    test_caps.c
+    ../src/umesh.c
+    ../src/net/net.c
+    ../src/net/routing.c
+    ../src/net/discovery.c
+    ../src/power/power.c
+    ../src/mac/mac.c
+    ../src/mac/cca.c
+    ../src/mac/frame.c
+    ../src/common/crc.c
+    ../src/common/ring.c
+    ../src/phy/phy.c
+    ../src/sec/sec.c
+    ../src/sec/keys.c
+    ../port/posix/phy_posix.c
+    ../port/posix/power_posix.c
+)
+target_include_directories(test_caps PRIVATE ../src ../include ../port/posix)
+if(UMESH_USE_MICROCRYPT)
+    target_compile_definitions(test_caps PRIVATE UMESH_USE_MICROCRYPT=1)
+    target_link_libraries(test_caps PRIVATE microcrypt)
+endif()
+add_test(NAME test_caps COMMAND test_caps)
