@@ -99,6 +99,7 @@ add_executable(test_e2e
     ../src/net/net.c
     ../src/net/routing.c
     ../src/net/discovery.c
+    ../src/power/power.c
     ../src/mac/mac.c
     ../src/mac/cca.c
     ../src/mac/frame.c
@@ -108,6 +109,7 @@ add_executable(test_e2e
     ../src/sec/sec.c
     ../src/sec/keys.c
     ../port/posix/phy_posix.c
+    ../port/posix/power_posix.c
 )
 target_include_directories(test_e2e PRIVATE ../src ../include ../port/posix)
 if(UMESH_USE_MICROCRYPT)
@@ -159,3 +161,28 @@ if(UMESH_USE_MICROCRYPT)
     target_link_libraries(test_gradient PRIVATE microcrypt)
 endif()
 add_test(NAME test_gradient COMMAND test_gradient)
+
+add_executable(test_power
+    test_power.c
+    ../src/umesh.c
+    ../src/net/net.c
+    ../src/net/routing.c
+    ../src/net/discovery.c
+    ../src/power/power.c
+    ../src/mac/mac.c
+    ../src/mac/cca.c
+    ../src/mac/frame.c
+    ../src/common/crc.c
+    ../src/common/ring.c
+    ../src/phy/phy.c
+    ../src/sec/sec.c
+    ../src/sec/keys.c
+    ../port/posix/phy_posix.c
+    ../port/posix/power_posix.c
+)
+target_include_directories(test_power PRIVATE ../src ../include ../port/posix)
+if(UMESH_USE_MICROCRYPT)
+    target_compile_definitions(test_power PRIVATE UMESH_USE_MICROCRYPT=1)
+    target_link_libraries(test_power PRIVATE microcrypt)
+endif()
+add_test(NAME test_power COMMAND test_power)
