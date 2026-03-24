@@ -5,8 +5,8 @@
 
 [![Language: C99](https://img.shields.io/badge/language-C99-blue.svg)](#)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](#)
-[![Platform](https://img.shields.io/badge/platform-ESP32%20%7C%20ESP32--S3%20%7C%20ESP32--C3-lightgrey.svg)](#)
-[![Status: v1.3.0](https://img.shields.io/badge/status-v1.3.0-brightgreen.svg)](#)
+[![Platform](https://img.shields.io/badge/platform-ESP32%20%7C%20S2%20%7C%20S3%20%7C%20C3%20%7C%20C6-lightgrey.svg)](#)
+[![Status: v1.4.0](https://img.shields.io/badge/status-v1.4.0-brightgreen.svg)](#)
 
 ---
 
@@ -192,6 +192,19 @@ RX current:       ~60 mA @ 3.3V
 
 **No extra hardware.** Just ESP32 + power supply.
 
+## Supported Hardware
+
+| Chip | WiFi | Tested | Notes |
+|------|------|--------|-------|
+| ESP32 | 802.11n | ✓ | Classic |
+| ESP32-S2 | 802.11n | ○ | No BT |
+| ESP32-S3 | 802.11n | ✓ | Recommended |
+| ESP32-C3 | 802.11n | ✓ | Budget option |
+| ESP32-C6 | 802.11ax | ○ | WiFi 6, TWT-ready |
+| ESP32-H2 | — | ✗ | No WiFi |
+
+✓ = hardware tested  ○ = compile-tested  ✗ = not supported
+
 ---
 
 ## Documentation
@@ -237,9 +250,10 @@ Other micro-toolkit libraries are optional and can be integrated if needed:
 + Security layer (AES-128 CTR, HMAC-SHA256)
 + Auto-mesh coordinator election
 + Gradient routing mode for sensor networks
++ Broad ESP32 capability detection (S2/S3/C3/C6)
 + ESP32 port
 + Examples
-+ Unit tests (12/12 passing)
++ Unit tests (13/13 passing)
 ```
 
 ---

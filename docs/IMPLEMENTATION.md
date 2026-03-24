@@ -11,6 +11,7 @@ umesh/
 |
 +-- include/
 |   +-- umesh.h                    # single public header
+|   +-- umesh_caps.h               # target capability detection
 |
 +-- src/
 |   +-- umesh.c                    # init, start, stop, API glue
@@ -41,8 +42,11 @@ umesh/
 +-- port/
 |   +-- esp32/
 |   |   +-- phy_esp32.c            # raw 802.11, promiscuous mode
+|   |   +-- power_esp32.c          # power HAL
+|   |   +-- twt_esp32c6.c          # C6 TWT stub
 |   +-- posix/
 |       +-- phy_posix.c            # simulation for PC tests
+|       +-- power_posix.c          # power simulation
 |
 +-- tests/
 |   +-- test_crc.c
@@ -374,12 +378,32 @@ ctest --test-dir build --output-on-failure
 
 ---
 
+## Target Capability Detection
+
+`include/umesh_caps.h` provides compile-time target descriptors:
+- `UMESH_TARGET`
+- `UMESH_HAS_WIFI`
+- `UMESH_HAS_BT`
+- `UMESH_WIFI_GEN`
+- `UMESH_RAM_KB`
+- `UMESH_TX_POWER_MAX`
+- `UMESH_HAS_TWT` (ESP32-C6)
+
+Runtime wrappers are exposed by API:
+- `umesh_get_target()`
+- `umesh_get_wifi_gen()`
+- `umesh_target_supports(...)`
+
+---
+
 ## CMakeLists.txt
 
 ```cmake
 cmake_minimum_required(VERSION 3.16)
 project(umesh C)
 set(CMAKE_C_STANDARD 99)
+option(UMESH_ENABLE_POWER_MANAGEMENT "Enable power management" ON)
+option(UMESH_LOW_MEMORY "Enable reduced-memory profile" OFF)
 
 set(UMESH_SOURCES
     src/umesh.c
@@ -402,8 +426,13 @@ target_include_directories(umesh PRIVATE src)
 
 if(UMESH_PORT STREQUAL "esp32")
     target_sources(umesh PRIVATE port/esp32/phy_esp32.c)
+    target_sources(umesh PRIVATE port/esp32/power_esp32.c)
+    if(DEFINED CONFIG_IDF_TARGET_ESP32C6 AND CONFIG_IDF_TARGET_ESP32C6)
+        target_sources(umesh PRIVATE port/esp32/twt_esp32c6.c)
+    endif()
 else()
     target_sources(umesh PRIVATE port/posix/phy_posix.c)
+    target_sources(umesh PRIVATE port/posix/power_posix.c)
     message(STATUS "umesh: POSIX port (testing)")
 endif()
 
