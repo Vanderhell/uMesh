@@ -22,18 +22,19 @@ void cca_init(void)
 
 /*
  * Returns true if the channel appears free.
- * Channel is busy if:
- *   - Reception is currently in progress, OR
- *   - Last measured RSSI is above the CCA threshold
- *     (i.e. someone is transmitting)
+ *
+ * On ESP32, channel energy is not directly measurable outside of the
+ * promiscuous callback.  Using s_last_rssi as a proxy is incorrect —
+ * it reflects the RSSI of the *last received packet*, not the current
+ * channel energy level, so it causes CCA to appear permanently busy
+ * whenever a frame was recently received above the threshold.
+ *
+ * We therefore rely solely on s_rx_in_progress (set while on_phy_rx
+ * is executing) to detect an active reception in progress.
  */
 bool cca_channel_free(void)
 {
-    if (s_rx_in_progress) {
-        return false;
-    }
-    /* RSSI below threshold (more negative) means channel is quiet */
-    return s_last_rssi < UMESH_CCA_THRESHOLD;
+    return !s_rx_in_progress;
 }
 
 void cca_set_rssi(int8_t rssi)

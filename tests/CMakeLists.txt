@@ -115,3 +115,47 @@ if(UMESH_USE_MICROCRYPT)
     target_link_libraries(test_e2e PRIVATE microcrypt)
 endif()
 add_test(NAME test_e2e COMMAND test_e2e)
+
+add_executable(test_election
+    test_election.c
+    ../src/net/net.c
+    ../src/net/routing.c
+    ../src/net/discovery.c
+    ../src/mac/mac.c
+    ../src/mac/cca.c
+    ../src/mac/frame.c
+    ../src/common/crc.c
+    ../src/common/ring.c
+    ../src/phy/phy.c
+    ../src/sec/sec.c
+    ../src/sec/keys.c
+    ../port/posix/phy_posix.c
+)
+target_include_directories(test_election PRIVATE ../src ../include ../port/posix)
+if(UMESH_USE_MICROCRYPT)
+    target_compile_definitions(test_election PRIVATE UMESH_USE_MICROCRYPT=1)
+    target_link_libraries(test_election PRIVATE microcrypt)
+endif()
+add_test(NAME test_election COMMAND test_election)
+
+add_executable(test_gradient
+    test_gradient.c
+    ../src/net/net.c
+    ../src/net/routing.c
+    ../src/net/discovery.c
+    ../src/mac/mac.c
+    ../src/mac/cca.c
+    ../src/mac/frame.c
+    ../src/common/crc.c
+    ../src/common/ring.c
+    ../src/phy/phy.c
+    ../src/sec/sec.c
+    ../src/sec/keys.c
+    ../port/posix/phy_posix.c
+)
+target_include_directories(test_gradient PRIVATE ../src ../include ../port/posix)
+if(UMESH_USE_MICROCRYPT)
+    target_compile_definitions(test_gradient PRIVATE UMESH_USE_MICROCRYPT=1)
+    target_link_libraries(test_gradient PRIVATE microcrypt)
+endif()
+add_test(NAME test_gradient COMMAND test_gradient)

@@ -76,6 +76,24 @@ class Device:
     def is_alive(self) -> bool:
         return self._thread is not None and self._thread.is_alive()
 
+    def clear_events(self) -> None:
+        """Drop all buffered events collected so far."""
+        with self._lock:
+            self._events.clear()
+
+    def send_command(self, command: str) -> None:
+        """
+        Send an ASCII command line to the device serial console.
+        Appends newline when missing.
+        """
+        line = command if command.endswith("\n") else f"{command}\n"
+        payload = line.encode("ascii", errors="ignore")
+        with self._lock:
+            if not self._serial or not self._serial.is_open:
+                raise RuntimeError(f"{self.role} serial port is not open")
+            self._serial.write(payload)
+            self._serial.flush()
+
     # ── Event access ──────────────────────────────────────────────────────
 
     def events(self) -> List[dict]:

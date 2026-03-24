@@ -8,7 +8,7 @@
 
 /* ── Version ───────────────────────────────── */
 #define UMESH_VERSION_MAJOR    1
-#define UMESH_VERSION_MINOR    0
+#define UMESH_VERSION_MINOR    2
 #define UMESH_VERSION_PATCH    0
 
 /* ── Addresses ─────────────────────────────── */
@@ -20,6 +20,7 @@
 #define UMESH_MAX_NODES        16
 #define UMESH_MAX_PAYLOAD      64
 #define UMESH_MAX_ROUTES       16
+#define UMESH_MAX_NEIGHBORS    16
 #define UMESH_MAX_HOP_COUNT    15
 #define UMESH_SEQ_WINDOW       32
 
@@ -48,6 +49,10 @@
 #define UMESH_JOIN_TIMEOUT_MS   5000
 #define UMESH_DISCOVER_TIMEOUT_MS 2000
 #define UMESH_DISCOVER_BACKOFF_MS 50
+#define UMESH_ELECTION_TIMEOUT_MS 1000
+#define UMESH_GRADIENT_BEACON_MS 30000
+#define UMESH_GRADIENT_JITTER_MAX_MS 200
+#define UMESH_NEIGHBOR_TIMEOUT_MS 30000
 
 /* ── TX power ──────────────────────────────── */
 #define UMESH_TX_POWER_MAX     78
@@ -65,15 +70,17 @@ typedef enum {
     UMESH_ROLE_COORDINATOR = 0,
     UMESH_ROLE_ROUTER      = 1,
     UMESH_ROLE_END_NODE    = 2,
+    UMESH_ROLE_AUTO        = 3,
 } umesh_role_t;
 
 /* ── State ─────────────────────────────────── */
 typedef enum {
     UMESH_STATE_UNINIT       = 0,
     UMESH_STATE_SCANNING     = 1,
-    UMESH_STATE_JOINING      = 2,
-    UMESH_STATE_CONNECTED    = 3,
-    UMESH_STATE_DISCONNECTED = 4,
+    UMESH_STATE_ELECTION     = 2,
+    UMESH_STATE_JOINING      = 3,
+    UMESH_STATE_CONNECTED    = 4,
+    UMESH_STATE_DISCONNECTED = 5,
 } umesh_state_t;
 
 /* ── Security level ────────────────────────── */
@@ -82,6 +89,11 @@ typedef enum {
     UMESH_SEC_AUTH = 0x01,
     UMESH_SEC_FULL = 0x02,
 } umesh_security_t;
+
+typedef enum {
+    UMESH_ROUTING_DISTANCE_VECTOR = 0,
+    UMESH_ROUTING_GRADIENT        = 1,
+} umesh_routing_mode_t;
 
 /* ── FLAGS ─────────────────────────────────── */
 #define UMESH_FLAG_ACK_REQ     (1 << 0)
@@ -132,9 +144,20 @@ typedef enum {
     UMESH_CMD_ROUTE_UPDATE  = 0x54,
     UMESH_CMD_NODE_JOINED   = 0x55,
     UMESH_CMD_NODE_LEFT     = 0x56,
+    UMESH_CMD_ELECTION      = 0x57,
+    UMESH_CMD_ELECTION_RESULT = 0x58,
+    UMESH_CMD_GRADIENT_BEACON = 0x59,
+    UMESH_CMD_GRADIENT_UPDATE = 0x5A,
     UMESH_CMD_USER_BASE     = 0xE0,
     UMESH_CMD_RAW           = 0xFF,
 } umesh_cmd_t;
+
+typedef struct {
+    uint8_t  node_id;
+    uint8_t  distance;
+    int8_t   rssi;
+    uint32_t last_seen_ms;
+} umesh_neighbor_t;
 
 /* ── Internal frame ────────────────────────── */
 typedef struct {

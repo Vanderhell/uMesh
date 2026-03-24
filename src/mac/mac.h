@@ -13,6 +13,7 @@ typedef struct {
 } mac_stats_t;
 
 umesh_result_t mac_init(uint8_t node_id);
+void           mac_set_node_id(uint8_t node_id);
 umesh_result_t mac_send(umesh_frame_t *frame);
 void           mac_set_rx_callback(void (*cb)(umesh_frame_t *frame,
                                               int8_t rssi));

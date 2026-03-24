@@ -138,6 +138,11 @@ static void on_phy_rx(const uint8_t *buf, uint8_t len, int8_t rssi)
 
 /* ── Public API ────────────────────────────────────────── */
 
+void mac_set_node_id(uint8_t node_id)
+{
+    s_node_id = node_id;
+}
+
 umesh_result_t mac_init(uint8_t node_id)
 {
     s_node_id = node_id;

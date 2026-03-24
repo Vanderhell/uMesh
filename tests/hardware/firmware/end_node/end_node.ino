@@ -10,6 +10,7 @@
  */
 
 #include <Arduino.h>
+#include <string.h>
 #include "../../../../include/umesh.h"
 
 /* ── Network configuration ─────────────────────────────────────────────── */
@@ -30,6 +31,8 @@ static volatile bool    s_send_pong      = false;
 static volatile uint8_t s_pong_dst       = 0;
 static volatile bool    s_send_temp      = false;
 static volatile uint8_t s_temp_dst       = 0;
+static char             s_cmd_buf[24];
+static uint8_t          s_cmd_len = 0;
 
 /* ── JSON helpers ──────────────────────────────────────────────────────── */
 
@@ -56,6 +59,29 @@ static void json_error(umesh_result_t code) {
     Serial.printf("{\"event\":\"error\","
                   "\"data\":{\"code\":%d,\"msg\":\"%s\"}}\n",
                   code, umesh_err_str(code));
+}
+
+static void handle_serial_command(const char *cmd) {
+    if (strcmp(cmd, "READY") == 0) {
+        json_ready(umesh_get_info().node_id);
+    }
+}
+
+static void poll_serial_commands(void) {
+    while (Serial.available() > 0) {
+        char c = (char)Serial.read();
+        if (c == '\r' || c == '\n') {
+            if (s_cmd_len == 0) continue;
+            s_cmd_buf[s_cmd_len] = '\0';
+            handle_serial_command(s_cmd_buf);
+            s_cmd_len = 0;
+            continue;
+        }
+
+        if (s_cmd_len < (sizeof(s_cmd_buf) - 1)) {
+            s_cmd_buf[s_cmd_len++] = c;
+        }
+    }
 }
 
 /* ── RX callback (WiFi task — no umesh_send() here!) ──────────────────── */
@@ -120,6 +146,7 @@ void setup(void) {
 }
 
 void loop(void) {
+    poll_serial_commands();
     umesh_tick(millis());
 
     /* Send PONG */

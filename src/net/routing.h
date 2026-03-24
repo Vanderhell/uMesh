@@ -25,4 +25,12 @@ void    routing_expire(uint32_t now_ms);
 uint8_t routing_metric(uint8_t hops, int8_t rssi);
 void    routing_remove(uint8_t dst);
 
+void    neighbor_init(void);
+void    neighbor_update(uint8_t node_id, uint8_t distance,
+                        int8_t rssi, uint32_t now_ms);
+uint8_t neighbor_find_uphill(uint8_t my_distance);
+void    neighbor_expire(uint32_t now_ms);
+uint8_t neighbor_count(void);
+bool    neighbor_get(uint8_t index, umesh_neighbor_t *out);
+
 #endif /* UMESH_ROUTING_H */

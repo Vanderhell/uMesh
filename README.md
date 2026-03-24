@@ -6,7 +6,7 @@
 [![Language: C99](https://img.shields.io/badge/language-C99-blue.svg)](#)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](#)
 [![Platform](https://img.shields.io/badge/platform-ESP32%20%7C%20ESP32--S3%20%7C%20ESP32--C3-lightgrey.svg)](#)
-[![Status: v1.0.0](https://img.shields.io/badge/status-v1.0.0-brightgreen.svg)](#)
+[![Status: v1.2.0](https://img.shields.io/badge/status-v1.2.0-brightgreen.svg)](#)
 
 ---
 
@@ -102,6 +102,29 @@ void app_main(void) {
 
 ---
 
+## Sensor Networks (Gradient Routing)
+
+For many-to-one sensor collection (for example 30 sensors -> 1 coordinator),
+enable gradient mode:
+
+```c
+umesh_cfg_t cfg = {
+    .net_id = 0x01,
+    .node_id = UMESH_ADDR_UNASSIGNED,
+    .master_key = KEY,
+    .role = UMESH_ROLE_AUTO,
+    .security = UMESH_SEC_FULL,
+    .channel = 6,
+    .routing = UMESH_ROUTING_GRADIENT,
+    .on_gradient_ready = on_ready,
+};
+```
+
+In this mode each node tracks distance-to-coordinator and forwards packets
+uphill through neighbors with lower distance.
+
+---
+
 ## Architecture
 
 ```
@@ -176,6 +199,7 @@ RX current:       ~60 mA @ 3.3V
 | Document | Content |
 |---|---|
 | [DESIGN.md](docs/DESIGN.md) | Architectural decisions and rationale |
+| [API_REFERENCE.md](docs/API_REFERENCE.md) | Public API, cfg fields and callbacks |
 | [PHYSICAL_LAYER.md](docs/PHYSICAL_LAYER.md) | Raw 802.11, promiscuous mode, ESP32 WiFi API |
 | [MAC_LAYER.md](docs/MAC_LAYER.md) | CSMA/CA, ACK, backoff, collisions |
 | [NETWORK_LAYER.md](docs/NETWORK_LAYER.md) | Routing, discovery, multi-hop |
@@ -210,9 +234,11 @@ Other micro-toolkit libraries are optional and can be integrated if needed:
 + MAC layer (CSMA/CA, ACK, backoff)
 + Network layer (routing, discovery, FSM)
 + Security layer (AES-128 CTR, HMAC-SHA256)
++ Auto-mesh coordinator election
++ Gradient routing mode for sensor networks
 + ESP32 port
 + Examples
-+ Unit tests (9/9 passing)
++ Unit tests (11/11 passing)
 ```
 
 ---

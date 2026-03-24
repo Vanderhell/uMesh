@@ -22,6 +22,17 @@ typedef struct {
     umesh_security_t security;
     uint8_t          channel;
     uint8_t          tx_power;
+    umesh_routing_mode_t routing;
+    uint32_t         gradient_beacon_ms;
+    uint32_t         gradient_jitter_max_ms;
+    uint32_t         scan_ms;
+    uint32_t         election_ms;
+    void           (*on_joined)(uint8_t node_id);
+    void           (*on_role_elected)(umesh_role_t role);
+    void           (*on_node_joined)(uint8_t node_id);
+    void           (*on_node_left)(uint8_t node_id);
+    void           (*on_gradient_ready)(uint8_t distance);
+    void           (*on_error)(umesh_result_t err);
 } umesh_cfg_t;
 
 typedef struct {
@@ -74,7 +85,16 @@ void umesh_on_receive(void (*cb)(umesh_pkt_t *pkt));
 void umesh_on_cmd(uint8_t cmd, void (*cb)(umesh_pkt_t *pkt));
 
 umesh_info_t  umesh_get_info(void);
+umesh_role_t  umesh_get_role(void);
+bool          umesh_is_coordinator(void);
+umesh_result_t umesh_trigger_election(void);
+uint8_t       umesh_gradient_distance(void);
+umesh_routing_mode_t umesh_get_routing_mode(void);
+umesh_result_t umesh_gradient_refresh(void);
+uint8_t       umesh_get_neighbor_count(void);
+umesh_neighbor_t umesh_get_neighbor(uint8_t index);
 umesh_stats_t umesh_get_stats(void);
+void          umesh_tick(uint32_t now_ms);
 const char   *umesh_err_str(umesh_result_t err);
 
 #ifdef __cplusplus
