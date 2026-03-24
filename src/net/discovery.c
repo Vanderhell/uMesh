@@ -68,6 +68,14 @@ static void derive_fallback_mac(uint8_t net_id, uint8_t node_id, uint8_t out[6])
     out[5] = 0x01;
 }
 
+static uint8_t derive_auto_node_id_from_mac(const uint8_t mac[6])
+{
+    uint8_t id = (uint8_t)(((uint16_t)mac[4] << 1) ^ mac[5]);
+    id = (uint8_t)(2u + (id % 252u)); /* 0x02..0xFD */
+    if (id == UMESH_ADDR_COORDINATOR) id = 0x02;
+    return id;
+}
+
 static uint32_t gradient_jitter_delay_ms(void)
 {
     uint32_t max = s_gradient_jitter_max_ms;
@@ -238,6 +246,16 @@ umesh_result_t discovery_start_election(void)
                       s_local_mac, 6, UMESH_FLAG_PRIO_HIGH);
 }
 
+umesh_result_t discovery_broadcast_election_result(void)
+{
+    static const uint8_t zero_mac[6] = {0};
+    if (memcmp(s_auto_winner_mac, zero_mac, 6) == 0) {
+        memcpy(s_auto_winner_mac, s_local_mac, 6);
+    }
+    return send_frame(UMESH_ADDR_BROADCAST, UMESH_CMD_ELECTION_RESULT,
+                      s_auto_winner_mac, 6, UMESH_FLAG_PRIO_HIGH);
+}
+
 void discovery_leave(void)
 {
     send_frame(UMESH_ADDR_BROADCAST, UMESH_CMD_LEAVE,
@@ -291,9 +309,7 @@ void discovery_auto_promote_to_coordinator(void)
     s_joined = true;
     s_next_assign_id = 0x02;
     memcpy(s_auto_winner_mac, s_local_mac, 6);
-
-    send_frame(UMESH_ADDR_BROADCAST, UMESH_CMD_ELECTION_RESULT,
-               s_auto_winner_mac, 6, UMESH_FLAG_PRIO_HIGH);
+    discovery_broadcast_election_result();
 }
 
 void discovery_gradient_reset(void)
@@ -355,7 +371,7 @@ void discovery_on_frame(const umesh_frame_t *frame, int8_t rssi)
 
             send_frame(UMESH_ADDR_BROADCAST, UMESH_CMD_ASSIGN,
                        &new_id, 1, UMESH_FLAG_PRIO_HIGH);
-            routing_add(new_id, new_id, 1, rssi, 0);
+            routing_add(new_id, new_id, 1, rssi, s_now_ms);
             send_frame(UMESH_ADDR_BROADCAST, UMESH_CMD_NODE_JOINED,
                        &new_id, 1, UMESH_FLAG_PRIO_NORMAL);
         }
@@ -371,7 +387,7 @@ void discovery_on_frame(const umesh_frame_t *frame, int8_t rssi)
             s_assigned_id = new_id;
             s_joined = true;
             routing_add(UMESH_ADDR_COORDINATOR,
-                        UMESH_ADDR_COORDINATOR, 1, rssi, 0);
+                        UMESH_ADDR_COORDINATOR, 1, rssi, s_now_ms);
         }
         break;
 
@@ -387,7 +403,7 @@ void discovery_on_frame(const umesh_frame_t *frame, int8_t rssi)
     case UMESH_CMD_NODE_JOINED:
         if (frame->payload_len >= 1) {
             routing_add(frame->payload[0],
-                        UMESH_ADDR_COORDINATOR, 1, rssi, 0);
+                        UMESH_ADDR_COORDINATOR, 1, rssi, s_now_ms);
         }
         break;
 
@@ -402,7 +418,7 @@ void discovery_on_frame(const umesh_frame_t *frame, int8_t rssi)
             s_auto_seen_coordinator = true;
         }
         if (s_role != UMESH_ROLE_END_NODE) {
-            routing_add(frame->src, frame->src, 1, rssi, 0);
+            routing_add(frame->src, frame->src, 1, rssi, s_now_ms);
         }
         break;
 
@@ -461,13 +477,30 @@ void discovery_on_frame(const umesh_frame_t *frame, int8_t rssi)
         if (frame->payload_len < 6) break;
         s_auto_seen_result = true;
         memcpy(s_auto_winner_mac, frame->payload, 6);
-        if (mac_compare(s_auto_winner_mac, s_local_mac) != 0) {
-            s_role = UMESH_ROLE_ROUTER;
-            if (s_node_id == UMESH_ADDR_COORDINATOR) {
-                s_node_id = UMESH_ADDR_UNASSIGNED;
-                s_assigned_id = UMESH_ADDR_UNASSIGNED;
+        {
+            int cmp = mac_compare(s_auto_winner_mac, s_local_mac);
+            if (cmp < 0) {
+                /* Lower-MAC winner overrides local role. */
+                s_role = UMESH_ROLE_ROUTER;
+                if (s_node_id == UMESH_ADDR_COORDINATOR) {
+                    s_node_id = UMESH_ADDR_UNASSIGNED;
+                    s_assigned_id = UMESH_ADDR_UNASSIGNED;
+                }
+                if (s_node_id == UMESH_ADDR_UNASSIGNED) {
+                    s_node_id = derive_auto_node_id_from_mac(s_local_mac);
+                    s_assigned_id = s_node_id;
+                }
+                s_joined = true;
+            } else if (cmp == 0) {
+                /* Result confirms we are the elected coordinator. */
+                s_role = UMESH_ROLE_COORDINATOR;
+                s_node_id = UMESH_ADDR_COORDINATOR;
+                s_assigned_id = UMESH_ADDR_COORDINATOR;
+                s_joined = true;
+                s_next_assign_id = 0x02;
+            } else {
+                /* Higher-MAC winner is ignored; local node may still win. */
             }
-            s_joined = (s_node_id != UMESH_ADDR_UNASSIGNED);
         }
         break;
 

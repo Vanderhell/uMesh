@@ -12,6 +12,9 @@
 #define NET_ID     0x01
 #define CHANNEL    6
 #define TX_POWER   52
+#define AUTO_SCAN_MS      5000
+#define AUTO_ELECTION_MS  3000
+#define BOOT_JITTER_MAX_MS 800
 
 static const uint8_t MASTER_KEY[16] = {
     0x2B, 0x7E, 0x15, 0x16, 0x28, 0xAE, 0xD2, 0xA6,
@@ -22,22 +25,59 @@ static volatile bool s_send_pong = false;
 static volatile uint8_t s_pong_dst = 0;
 static char s_cmd_buf[16];
 static uint8_t s_cmd_len = 0;
+static uint32_t s_last_ping_ms = 0;
+static const uint32_t HEARTBEAT_MS = 3000;
+
+static const char* role_str(umesh_role_t role) {
+    switch (role) {
+        case UMESH_ROLE_COORDINATOR: return "coordinator";
+        case UMESH_ROLE_ROUTER:      return "router";
+        case UMESH_ROLE_END_NODE:    return "end_node";
+        case UMESH_ROLE_AUTO:        return "auto";
+        default:                     return "unknown";
+    }
+}
+
+static const char* state_str(umesh_state_t state) {
+    switch (state) {
+        case UMESH_STATE_UNINIT:       return "uninit";
+        case UMESH_STATE_SCANNING:     return "scanning";
+        case UMESH_STATE_ELECTION:     return "election";
+        case UMESH_STATE_JOINING:      return "joining";
+        case UMESH_STATE_CONNECTED:    return "connected";
+        case UMESH_STATE_DISCONNECTED: return "disconnected";
+        default:                       return "unknown";
+    }
+}
 
 static void json_ready(void) {
+    umesh_info_t info = umesh_get_info();
     Serial.printf("{\"event\":\"ready\","
-                  "\"data\":{\"mode\":\"auto\",\"state\":\"connected\","
+                  "\"data\":{\"mode\":\"auto\",\"role\":\"%s\",\"state\":\"%s\","
                   "\"node_id\":%u,\"channel\":%u,\"net_id\":%u}}\n",
-                  umesh_get_info().node_id,
-                  umesh_get_info().channel,
-                  umesh_get_info().net_id);
+                  role_str(info.role), state_str(info.state),
+                  info.node_id, info.channel, info.net_id);
 }
 
 static void json_status(void) {
     umesh_info_t info = umesh_get_info();
     Serial.printf("{\"event\":\"status\","
-                  "\"data\":{\"mode\":\"auto\",\"state\":\"connected\","
+                  "\"data\":{\"mode\":\"auto\",\"role\":\"%s\",\"state\":\"%s\","
                   "\"node_id\":%u,\"channel\":%u,\"net_id\":%u}}\n",
+                  role_str(info.role), state_str(info.state),
                   info.node_id, info.channel, info.net_id);
+}
+
+static void json_tx(uint8_t dst, uint8_t cmd, uint8_t size) {
+    Serial.printf("{\"event\":\"tx\","
+                  "\"data\":{\"dst\":%u,\"cmd\":\"0x%02X\",\"size\":%u}}\n",
+                  dst, cmd, size);
+}
+
+static void json_rx(uint8_t src, uint8_t cmd, int8_t rssi) {
+    Serial.printf("{\"event\":\"rx\","
+                  "\"data\":{\"src\":%u,\"cmd\":\"0x%02X\",\"rssi\":%d}}\n",
+                  src, cmd, rssi);
 }
 
 static void json_elected(umesh_role_t role) {
@@ -59,6 +99,7 @@ static void on_role_elected(umesh_role_t role) {
 
 static void on_receive(umesh_pkt_t *pkt) {
     if (!pkt) return;
+    json_rx(pkt->src, pkt->cmd, pkt->rssi);
     if (pkt->cmd == UMESH_CMD_PING) {
         s_pong_dst = pkt->src;
         s_send_pong = true;
@@ -68,6 +109,7 @@ static void on_receive(umesh_pkt_t *pkt) {
 void setup(void) {
     Serial.begin(115200);
     delay(200);
+    randomSeed((uint32_t)micros());
 
     umesh_cfg_t cfg = {
         .net_id = NET_ID,
@@ -77,8 +119,8 @@ void setup(void) {
         .security = UMESH_SEC_FULL,
         .channel = CHANNEL,
         .tx_power = TX_POWER,
-        .scan_ms = 2000,
-        .election_ms = 1000,
+        .scan_ms = AUTO_SCAN_MS,
+        .election_ms = AUTO_ELECTION_MS,
         .on_role_elected = on_role_elected,
     };
 
@@ -87,6 +129,8 @@ void setup(void) {
 
     umesh_on_receive(on_receive);
 
+    delay((uint32_t)random(0, BOOT_JITTER_MAX_MS + 1));
+
     r = umesh_start();
     if (r != UMESH_OK) { json_error(r); return; }
 
@@ -94,6 +138,8 @@ void setup(void) {
 }
 
 void loop(void) {
+    umesh_info_t info;
+
     while (Serial.available() > 0) {
         char c = (char)Serial.read();
         if (c == '\n' || c == '\r') {
@@ -114,11 +160,25 @@ void loop(void) {
     }
 
     umesh_tick(millis());
+    info = umesh_get_info();
 
     if (s_send_pong) {
         s_send_pong = false;
+        json_tx(s_pong_dst, UMESH_CMD_PONG, 0);
         umesh_result_t r = umesh_send_cmd(s_pong_dst, UMESH_CMD_PONG, 0);
         if (r != UMESH_OK) json_error(r);
+    }
+
+    if (info.state == UMESH_STATE_CONNECTED &&
+        info.role != UMESH_ROLE_COORDINATOR &&
+        (millis() - s_last_ping_ms) >= HEARTBEAT_MS) {
+        s_last_ping_ms = millis();
+        json_tx(UMESH_ADDR_COORDINATOR, UMESH_CMD_PING, 0);
+        {
+            umesh_result_t r = umesh_send_cmd(UMESH_ADDR_COORDINATOR,
+                                              UMESH_CMD_PING, 0);
+            if (r != UMESH_OK) json_error(r);
+        }
     }
 
     delay(5);

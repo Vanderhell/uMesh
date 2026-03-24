@@ -131,6 +131,37 @@ static void test_role_auto_backward_compat(void)
                 "compat: explicit coordinator skips election");
 }
 
+static void test_split_brain_converges_to_lower_result(void)
+{
+    uint8_t high_mac[6] = {0x40, 0, 0, 0, 0, 1};
+    umesh_frame_t frame;
+
+    init_posix_stack(UMESH_ADDR_UNASSIGNED, UMESH_ROLE_AUTO);
+    net_config_auto(10, 20, high_mac);
+    net_join();
+
+    /* Become coordinator first. */
+    net_tick(0);
+    net_tick(11);
+    net_tick(35);
+    TEST_ASSERT(net_get_role() == UMESH_ROLE_COORDINATOR,
+                "split-brain: local node initially coordinator");
+
+    /* Receive election result from lower-MAC winner. */
+    memset(&frame, 0, sizeof(frame));
+    frame.net_id = 0x01;
+    frame.src = UMESH_ADDR_COORDINATOR;
+    frame.dst = UMESH_ADDR_BROADCAST;
+    frame.cmd = UMESH_CMD_ELECTION_RESULT;
+    frame.payload_len = 6;
+    frame.payload[0] = 0x10; /* lower winner MAC */
+    net_on_frame(&frame, -60);
+    net_tick(36);
+
+    TEST_ASSERT(net_get_role() == UMESH_ROLE_ROUTER,
+                "split-brain: lower winner demotes local coordinator");
+}
+
 int main(void)
 {
     printf("=== test_election ===\n");
@@ -138,6 +169,7 @@ int main(void)
     test_election_single_node();
     test_election_coordinator_failover();
     test_role_auto_backward_compat();
+    test_split_brain_converges_to_lower_result();
     printf("Result: %d passed, %d failed\n", s_pass, s_fail);
     return (s_fail == 0) ? 0 : 1;
 }

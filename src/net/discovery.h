@@ -22,6 +22,7 @@ void           discovery_set_node_id(uint8_t node_id);
 bool           discovery_auto_seen_coordinator(void);
 void           discovery_auto_clear_scan_flag(void);
 umesh_result_t discovery_start_election(void);
+umesh_result_t discovery_broadcast_election_result(void);
 void           discovery_auto_clear_election_flags(void);
 bool           discovery_auto_saw_lower_mac(void);
 bool           discovery_auto_seen_election_result(void);

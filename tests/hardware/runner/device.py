@@ -57,7 +57,12 @@ class Device:
 
     def start(self) -> None:
         import serial  # imported here so import errors are clear
-        self._serial  = serial.Serial(self.port, self.baud, timeout=1)
+        self._serial  = serial.Serial(
+            self.port,
+            self.baud,
+            timeout=1,
+            write_timeout=1,
+        )
         self._running = True
         self._thread  = threading.Thread(
             target=self._read_loop,

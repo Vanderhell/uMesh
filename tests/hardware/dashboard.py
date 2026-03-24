@@ -283,12 +283,15 @@ class Dashboard:
             def tick(ok: bool) -> str:
                 return "[green]✓[/green]" if ok else "[dim]·[/dim]"
 
-            tbl.add_row(
-                "JOIN seq",
-                f"{tick(s.join_sent)} sent  "
-                f"{tick(s.assign_recvd)} assign  "
-                f"{tick(s.joined)} joined",
-            )
+            if s.joined and not s.join_sent and not s.assign_recvd:
+                tbl.add_row("JOIN seq", "[cyan]fixed-id[/cyan]")
+            else:
+                tbl.add_row(
+                    "JOIN seq",
+                    f"{tick(s.join_sent)} sent  "
+                    f"{tick(s.assign_recvd)} assign  "
+                    f"{tick(s.joined)} joined",
+                )
 
             border = rc
 
@@ -369,7 +372,7 @@ def list_serial_ports() -> None:
 @click.option("--request-ready", is_flag=True, default=False,
               help="Send READY command to connected devices after opening ports")
 @click.option("--start-tests", is_flag=True, default=False,
-              help="Send START command to coordinator after opening ports")
+              help="Send START command to coordinator after opening ports (deprecated, now automatic)")
 @click.option("--list-ports",  is_flag=True, default=False,
               help="List available serial ports and exit")
 def main(coordinator: str, router: str, end_node: str,
@@ -455,16 +458,16 @@ def main(coordinator: str, router: str, end_node: str,
             except Exception as exc:
                 click.echo(f"  {role:12s}  READY  FAILED: {exc}", err=True)
 
-    if start_tests:
-        coord = devices.get("coordinator")
-        if not coord:
-            click.echo("Cannot send START: coordinator port is not connected.", err=True)
-        else:
-            try:
-                coord.send_command("START")
-                click.echo("Sent START to coordinator.")
-            except Exception as exc:
-                click.echo(f"Failed to send START: {exc}", err=True)
+    # Auto-start tests by default when coordinator is connected.
+    coord = devices.get("coordinator")
+    if not coord:
+        click.echo("Cannot send START: coordinator port is not connected.", err=True)
+    else:
+        try:
+            coord.send_command("START")
+            click.echo("Sent START to coordinator (auto).")
+        except Exception as exc:
+            click.echo(f"Failed to send START: {exc}", err=True)
 
     click.echo(f"\nMonitoring {len(devices)} device(s)...\n")
     time.sleep(0.3)
