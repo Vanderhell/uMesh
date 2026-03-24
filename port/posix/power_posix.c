@@ -1,4 +1,5 @@
 #include "../../src/power/power_hal.h"
+#if UMESH_ENABLE_POWER_MANAGEMENT
 
 #ifdef _WIN32
 #include <windows.h>
@@ -22,3 +23,19 @@ float power_hal_get_vcc(void)
 {
     return 3.30f;
 }
+#else
+void power_hal_light_sleep(uint32_t duration_ms)
+{
+    UMESH_UNUSED(duration_ms);
+}
+
+void power_hal_deep_sleep(uint32_t duration_ms)
+{
+    UMESH_UNUSED(duration_ms);
+}
+
+float power_hal_get_vcc(void)
+{
+    return 0.0f;
+}
+#endif

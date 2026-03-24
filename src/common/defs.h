@@ -6,6 +6,10 @@
 #include <stddef.h>
 #include <string.h>
 
+#ifndef UMESH_ENABLE_POWER_MANAGEMENT
+#define UMESH_ENABLE_POWER_MANAGEMENT 1
+#endif
+
 /* ── Version ───────────────────────────────── */
 #define UMESH_VERSION_MAJOR    1
 #define UMESH_VERSION_MINOR    3
@@ -132,6 +136,7 @@ typedef enum {
     UMESH_ERR_HARDWARE         = 11,
     UMESH_ERR_MIC_FAIL         = 12,
     UMESH_ERR_REPLAY           = 13,
+    UMESH_ERR_NOT_SUPPORTED    = 14,
 } umesh_result_t;
 
 /* ── Opcode table ──────────────────────────── */

@@ -1,4 +1,5 @@
 #include "power.h"
+#if UMESH_ENABLE_POWER_MANAGEMENT
 #include "power_hal.h"
 
 static umesh_power_mode_t s_mode = UMESH_POWER_ACTIVE;
@@ -193,3 +194,72 @@ umesh_power_stats_t power_get_stats(void)
 {
     return s_stats;
 }
+#else
+umesh_result_t power_init(umesh_power_mode_t mode,
+                          uint32_t light_interval_ms,
+                          uint32_t light_window_ms,
+                          uint32_t deep_sleep_tx_interval_ms,
+                          void (*on_sleep)(void),
+                          void (*on_wake)(void))
+{
+    UMESH_UNUSED(mode);
+    UMESH_UNUSED(light_interval_ms);
+    UMESH_UNUSED(light_window_ms);
+    UMESH_UNUSED(deep_sleep_tx_interval_ms);
+    UMESH_UNUSED(on_sleep);
+    UMESH_UNUSED(on_wake);
+    return UMESH_OK;
+}
+
+void power_tick(uint32_t now_ms, umesh_role_t role)
+{
+    UMESH_UNUSED(now_ms);
+    UMESH_UNUSED(role);
+}
+
+umesh_result_t power_set_mode(umesh_power_mode_t mode)
+{
+    UMESH_UNUSED(mode);
+    return UMESH_OK;
+}
+
+umesh_power_mode_t power_get_mode(void)
+{
+    return UMESH_POWER_ACTIVE;
+}
+
+void power_set_light_profile(uint32_t interval_ms, uint32_t window_ms)
+{
+    UMESH_UNUSED(interval_ms);
+    UMESH_UNUSED(window_ms);
+}
+
+void power_set_deep_interval(uint32_t interval_ms)
+{
+    UMESH_UNUSED(interval_ms);
+}
+
+umesh_result_t power_deep_sleep_cycle(umesh_routing_mode_t routing_mode,
+                                      umesh_role_t role)
+{
+    UMESH_UNUSED(routing_mode);
+    UMESH_UNUSED(role);
+    return UMESH_ERR_NOT_SUPPORTED;
+}
+
+float power_estimate_current_ma(void)
+{
+    return -1.0f;
+}
+
+umesh_power_stats_t power_get_stats(void)
+{
+    umesh_power_stats_t out;
+    out.sleep_count = 0;
+    out.total_sleep_ms = 0;
+    out.total_active_ms = 0;
+    out.duty_cycle_pct = 0.0f;
+    out.estimated_ma = 0.0f;
+    return out;
+}
+#endif

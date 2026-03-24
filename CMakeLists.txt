@@ -1,6 +1,13 @@
 cmake_minimum_required(VERSION 3.16)
 project(umesh C)
 set(CMAKE_C_STANDARD 99)
+option(UMESH_ENABLE_POWER_MANAGEMENT "Enable power management" ON)
+if(UMESH_ENABLE_POWER_MANAGEMENT)
+    set(UMESH_PM_FLAG 1)
+else()
+    set(UMESH_PM_FLAG 0)
+endif()
+add_compile_definitions(UMESH_ENABLE_POWER_MANAGEMENT=${UMESH_PM_FLAG})
 
 # microcrypt — optional crypto library
 if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/microcrypt/src/mcrypt.c")

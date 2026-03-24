@@ -25,10 +25,12 @@ static uint32_t      s_gradient_beacon_ms = UMESH_GRADIENT_BEACON_MS;
 static uint32_t      s_gradient_jitter_max_ms = UMESH_GRADIENT_JITTER_MAX_MS;
 static uint32_t      s_last_gradient_beacon_ms = 0;
 static uint32_t      s_last_election_result_ms = 0;
+#if UMESH_ENABLE_POWER_MANAGEMENT
 static umesh_power_mode_t s_power_mode = UMESH_POWER_ACTIVE;
 static uint32_t      s_light_sleep_interval_ms = UMESH_LIGHT_SLEEP_INTERVAL_MS;
 static uint32_t      s_light_listen_window_ms = UMESH_LIGHT_LISTEN_WINDOW_MS;
 static uint32_t      s_last_power_beacon_ms = 0;
+#endif
 
 static void (*s_net_rx_cb)(const umesh_frame_t *frame, int8_t rssi) = NULL;
 
@@ -123,10 +125,12 @@ umesh_result_t net_init(uint8_t net_id, uint8_t node_id, umesh_role_t role)
     s_gradient_jitter_max_ms = UMESH_GRADIENT_JITTER_MAX_MS;
     s_last_gradient_beacon_ms = 0;
     s_last_election_result_ms = 0;
+#if UMESH_ENABLE_POWER_MANAGEMENT
     s_power_mode = UMESH_POWER_ACTIVE;
     s_light_sleep_interval_ms = UMESH_LIGHT_SLEEP_INTERVAL_MS;
     s_light_listen_window_ms = UMESH_LIGHT_LISTEN_WINDOW_MS;
     s_last_power_beacon_ms = 0;
+#endif
 
     routing_init();
     mac_set_rx_callback(on_mac_rx);
@@ -170,6 +174,7 @@ void net_config_power(umesh_power_mode_t power_mode,
                       uint32_t light_interval_ms,
                       uint32_t light_listen_window_ms)
 {
+#if UMESH_ENABLE_POWER_MANAGEMENT
     s_power_mode = power_mode;
     s_light_sleep_interval_ms = (light_interval_ms == 0)
         ? UMESH_LIGHT_SLEEP_INTERVAL_MS : light_interval_ms;
@@ -178,6 +183,11 @@ void net_config_power(umesh_power_mode_t power_mode,
     if (s_light_listen_window_ms > s_light_sleep_interval_ms) {
         s_light_listen_window_ms = s_light_sleep_interval_ms;
     }
+#else
+    UMESH_UNUSED(power_mode);
+    UMESH_UNUSED(light_interval_ms);
+    UMESH_UNUSED(light_listen_window_ms);
+#endif
 }
 
 umesh_result_t net_join(void)
@@ -414,6 +424,7 @@ void net_tick(uint32_t now_ms)
     }
 
     if (s_state == UMESH_STATE_CONNECTED) {
+#if UMESH_ENABLE_POWER_MANAGEMENT
         if (s_role == UMESH_ROLE_COORDINATOR &&
             s_power_mode != UMESH_POWER_ACTIVE &&
             now_ms - s_last_power_beacon_ms >= UMESH_POWER_BEACON_MS) {
@@ -436,6 +447,7 @@ void net_tick(uint32_t now_ms)
             mac_send(&pframe);
             s_last_power_beacon_ms = now_ms;
         }
+#endif
 
         if (s_role_cfg == UMESH_ROLE_AUTO &&
             s_role == UMESH_ROLE_COORDINATOR &&

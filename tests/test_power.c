@@ -55,8 +55,13 @@ static void test_power_estimate_active(void)
 {
     init_umesh(UMESH_ROUTING_DISTANCE_VECTOR, UMESH_POWER_ACTIVE,
                UMESH_ROLE_COORDINATOR, UMESH_ADDR_COORDINATOR);
+#if UMESH_ENABLE_POWER_MANAGEMENT
     TEST_ASSERT(umesh_estimate_current_ma() > 50.0f,
                 "power: active estimate > 50mA");
+#else
+    TEST_ASSERT(umesh_estimate_current_ma() < 0.0f,
+                "power: disabled estimate is sentinel");
+#endif
 }
 
 static void test_power_estimate_light(void)
@@ -65,8 +70,12 @@ static void test_power_estimate_light(void)
                UMESH_ROLE_END_NODE, 0x02);
     {
         float ma = umesh_estimate_current_ma();
+#if UMESH_ENABLE_POWER_MANAGEMENT
         TEST_ASSERT(ma > 7.0f && ma < 9.0f,
                     "power: light estimate ~8mA");
+#else
+        TEST_ASSERT(ma < 0.0f, "power: light estimate disabled");
+#endif
     }
 }
 
@@ -74,8 +83,13 @@ static void test_power_estimate_deep(void)
 {
     init_umesh(UMESH_ROUTING_GRADIENT, UMESH_POWER_DEEP,
                UMESH_ROLE_END_NODE, 0x02);
+#if UMESH_ENABLE_POWER_MANAGEMENT
     TEST_ASSERT(umesh_estimate_current_ma() < 5.0f,
                 "power: deep estimate < 5mA");
+#else
+    TEST_ASSERT(umesh_estimate_current_ma() < 0.0f,
+                "power: deep estimate disabled");
+#endif
 }
 
 static void test_power_stats_tracking(void)
@@ -88,10 +102,16 @@ static void test_power_stats_tracking(void)
     umesh_tick(2600);
     {
         umesh_power_stats_t st = umesh_get_power_stats();
+#if UMESH_ENABLE_POWER_MANAGEMENT
         TEST_ASSERT(st.sleep_count > 0, "power: sleep_count increments");
         TEST_ASSERT(st.total_sleep_ms > 0, "power: total_sleep_ms increments");
         TEST_ASSERT(st.duty_cycle_pct > 0.0f && st.duty_cycle_pct < 100.0f,
                     "power: duty cycle tracked");
+#else
+        TEST_ASSERT(st.sleep_count == 0, "power: disabled sleep_count zero");
+        TEST_ASSERT(st.total_sleep_ms == 0, "power: disabled total_sleep_ms zero");
+        TEST_ASSERT(st.total_active_ms == 0, "power: disabled total_active_ms zero");
+#endif
     }
 }
 
@@ -99,8 +119,13 @@ static void test_power_deep_sleep_requires_gradient(void)
 {
     init_umesh(UMESH_ROUTING_DISTANCE_VECTOR, UMESH_POWER_DEEP,
                UMESH_ROLE_END_NODE, 0x02);
+#if UMESH_ENABLE_POWER_MANAGEMENT
     TEST_ASSERT(umesh_deep_sleep_cycle() == UMESH_ERR_NOT_ROUTABLE,
                 "power: deep sleep requires gradient routing");
+#else
+    TEST_ASSERT(umesh_deep_sleep_cycle() == UMESH_ERR_NOT_SUPPORTED,
+                "power: deep sleep not supported when disabled");
+#endif
 }
 
 static void test_esp32h2_not_supported(void)
