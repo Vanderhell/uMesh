@@ -306,9 +306,44 @@ umesh_info_t umesh_get_info(void)
     info.net_id     = s_cfg.net_id;
     info.role       = net_get_role();
     info.state      = (umesh_state_t)net_get_state();
+    info.coordinator = UMESH_ADDR_COORDINATOR;
     info.node_count = net_get_node_count();
     info.channel    = s_cfg.channel;
+    info.rssi       = -127;
+    info.target     = UMESH_TARGET;
+    info.wifi_gen   = (uint8_t)UMESH_WIFI_GEN;
+    info.tx_power_max = (uint8_t)UMESH_TX_POWER_MAX;
     return info;
+}
+
+const char *umesh_get_target(void)
+{
+    return UMESH_TARGET;
+}
+
+uint8_t umesh_get_wifi_gen(void)
+{
+    return (uint8_t)UMESH_WIFI_GEN;
+}
+
+bool umesh_target_supports(uint32_t capability)
+{
+    uint32_t mask = 0u;
+
+#if UMESH_HAS_WIFI
+    mask |= UMESH_CAP_WIFI;
+#endif
+#if UMESH_HAS_BT
+    mask |= UMESH_CAP_BT;
+#endif
+#ifdef UMESH_HAS_TWT
+    mask |= UMESH_CAP_TWT;
+#endif
+#if UMESH_ENABLE_POWER_MANAGEMENT
+    mask |= UMESH_CAP_POWER_MGT;
+#endif
+
+    return (mask & capability) == capability;
 }
 
 umesh_stats_t umesh_get_stats(void)

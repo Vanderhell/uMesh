@@ -55,8 +55,13 @@ typedef struct {
     uint8_t       net_id;
     umesh_role_t  role;
     umesh_state_t state;
+    uint8_t       coordinator;
     uint8_t       node_count;
     uint8_t       channel;
+    int8_t        rssi;
+    const char   *target;
+    uint8_t       wifi_gen;
+    uint8_t       tx_power_max;
 } umesh_info_t;
 
 typedef struct {
@@ -91,6 +96,9 @@ void umesh_on_receive(void (*cb)(umesh_pkt_t *pkt));
 void umesh_on_cmd(uint8_t cmd, void (*cb)(umesh_pkt_t *pkt));
 
 umesh_info_t  umesh_get_info(void);
+const char   *umesh_get_target(void);
+uint8_t       umesh_get_wifi_gen(void);
+bool          umesh_target_supports(uint32_t capability);
 umesh_role_t  umesh_get_role(void);
 bool          umesh_is_coordinator(void);
 umesh_result_t umesh_trigger_election(void);

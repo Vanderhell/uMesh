@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <string.h>
+#include "../../include/umesh_caps.h"
 
 #ifndef UMESH_ENABLE_POWER_MANAGEMENT
 #define UMESH_ENABLE_POWER_MANAGEMENT 1
@@ -12,7 +13,7 @@
 
 /* ── Version ───────────────────────────────── */
 #define UMESH_VERSION_MAJOR    1
-#define UMESH_VERSION_MINOR    3
+#define UMESH_VERSION_MINOR    4
 #define UMESH_VERSION_PATCH    0
 
 /* ── Addresses ─────────────────────────────── */
@@ -21,10 +22,16 @@
 #define UMESH_ADDR_UNASSIGNED  0xFE
 
 /* ── Network ───────────────────────────────── */
+#if UMESH_RAM_KB < 400
+#define UMESH_MAX_NODES         8
+#define UMESH_MAX_ROUTES        8
+#define UMESH_MAX_NEIGHBORS     8
+#else
 #define UMESH_MAX_NODES        16
-#define UMESH_MAX_PAYLOAD      64
 #define UMESH_MAX_ROUTES       16
 #define UMESH_MAX_NEIGHBORS    16
+#endif
+#define UMESH_MAX_PAYLOAD      64
 #define UMESH_MAX_HOP_COUNT    15
 #define UMESH_SEQ_WINDOW       32
 
@@ -63,7 +70,9 @@
 #define UMESH_DEEP_SLEEP_TX_INTERVAL_MS 30000
 
 /* ── TX power ──────────────────────────────── */
+#ifndef UMESH_TX_POWER_MAX
 #define UMESH_TX_POWER_MAX     78
+#endif
 #define UMESH_TX_POWER_DEFAULT 60
 #define UMESH_TX_POWER_LOW     20
 
@@ -119,6 +128,12 @@ typedef enum {
 #define UMESH_FLAG_PRIO_NORMAL (2 << 6)
 #define UMESH_FLAG_PRIO_LOW    (1 << 6)
 #define UMESH_FLAG_PRIO_BULK   (0 << 6)
+
+/* Capability flags */
+#define UMESH_CAP_WIFI      (1u << 0)
+#define UMESH_CAP_BT        (1u << 1)
+#define UMESH_CAP_TWT       (1u << 2)
+#define UMESH_CAP_POWER_MGT (1u << 3)
 
 /* ── Return codes ──────────────────────────── */
 typedef enum {
