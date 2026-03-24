@@ -24,10 +24,16 @@ static umesh_routing_mode_t s_routing_mode = UMESH_ROUTING_DISTANCE_VECTOR;
 static uint32_t      s_gradient_beacon_ms = UMESH_GRADIENT_BEACON_MS;
 static uint32_t      s_gradient_jitter_max_ms = UMESH_GRADIENT_JITTER_MAX_MS;
 static uint32_t      s_last_gradient_beacon_ms = 0;
+static uint32_t      s_last_election_result_ms = 0;
+static umesh_power_mode_t s_power_mode = UMESH_POWER_ACTIVE;
+static uint32_t      s_light_sleep_interval_ms = UMESH_LIGHT_SLEEP_INTERVAL_MS;
+static uint32_t      s_light_listen_window_ms = UMESH_LIGHT_LISTEN_WINDOW_MS;
+static uint32_t      s_last_power_beacon_ms = 0;
 
 static void (*s_net_rx_cb)(const umesh_frame_t *frame, int8_t rssi) = NULL;
 
 #define UMESH_JOIN_RETRY_MS 1000u
+#define UMESH_ELECTION_RESULT_ANNOUNCE_MS 1000u
 
 static uint16_t next_seq(void)
 {
@@ -116,6 +122,11 @@ umesh_result_t net_init(uint8_t net_id, uint8_t node_id, umesh_role_t role)
     s_gradient_beacon_ms = UMESH_GRADIENT_BEACON_MS;
     s_gradient_jitter_max_ms = UMESH_GRADIENT_JITTER_MAX_MS;
     s_last_gradient_beacon_ms = 0;
+    s_last_election_result_ms = 0;
+    s_power_mode = UMESH_POWER_ACTIVE;
+    s_light_sleep_interval_ms = UMESH_LIGHT_SLEEP_INTERVAL_MS;
+    s_light_listen_window_ms = UMESH_LIGHT_LISTEN_WINDOW_MS;
+    s_last_power_beacon_ms = 0;
 
     routing_init();
     mac_set_rx_callback(on_mac_rx);
@@ -152,6 +163,20 @@ void net_config_routing(umesh_routing_mode_t routing_mode,
                               s_gradient_jitter_max_ms);
     if (s_routing_mode != UMESH_ROUTING_GRADIENT) {
         discovery_gradient_reset();
+    }
+}
+
+void net_config_power(umesh_power_mode_t power_mode,
+                      uint32_t light_interval_ms,
+                      uint32_t light_listen_window_ms)
+{
+    s_power_mode = power_mode;
+    s_light_sleep_interval_ms = (light_interval_ms == 0)
+        ? UMESH_LIGHT_SLEEP_INTERVAL_MS : light_interval_ms;
+    s_light_listen_window_ms = (light_listen_window_ms == 0)
+        ? UMESH_LIGHT_LISTEN_WINDOW_MS : light_listen_window_ms;
+    if (s_light_listen_window_ms > s_light_sleep_interval_ms) {
+        s_light_listen_window_ms = s_light_sleep_interval_ms;
     }
 }
 
@@ -348,14 +373,25 @@ void net_tick(uint32_t now_ms)
                 discovery_auto_saw_lower_mac()) {
                 s_role = UMESH_ROLE_ROUTER;
                 discovery_set_role(UMESH_ROLE_ROUTER);
-                s_state = UMESH_STATE_JOINING;
-                s_state_enter_ms = now_ms;
-                s_last_join_ms = now_ms;
-                discovery_join();
+                if (discovery_get_node_id() != UMESH_ADDR_UNASSIGNED) {
+                    s_node_id = discovery_get_node_id();
+                    mac_set_node_id(s_node_id);
+                    routing_add(UMESH_ADDR_COORDINATOR, UMESH_ADDR_COORDINATOR,
+                                1, UMESH_RSSI_GOOD, now_ms);
+                    s_state = UMESH_STATE_CONNECTED;
+                    s_state_enter_ms = now_ms;
+                    s_last_coord_seen_ms = now_ms;
+                } else {
+                    s_state = UMESH_STATE_JOINING;
+                    s_state_enter_ms = now_ms;
+                    s_last_join_ms = now_ms;
+                    discovery_join();
+                }
             } else if (now_ms - s_state_enter_ms >= s_election_ms) {
                 s_role = UMESH_ROLE_COORDINATOR;
                 s_node_id = UMESH_ADDR_COORDINATOR;
                 discovery_auto_promote_to_coordinator();
+                s_last_election_result_ms = now_ms;
                 mac_set_node_id(UMESH_ADDR_COORDINATOR);
                 if (s_routing_mode == UMESH_ROUTING_GRADIENT) {
                     discovery_gradient_set_distance(0);
@@ -378,6 +414,36 @@ void net_tick(uint32_t now_ms)
     }
 
     if (s_state == UMESH_STATE_CONNECTED) {
+        if (s_role == UMESH_ROLE_COORDINATOR &&
+            s_power_mode != UMESH_POWER_ACTIVE &&
+            now_ms - s_last_power_beacon_ms >= UMESH_POWER_BEACON_MS) {
+            umesh_frame_t pframe;
+            memset(&pframe, 0, sizeof(pframe));
+            pframe.net_id = s_net_id;
+            pframe.dst = UMESH_ADDR_BROADCAST;
+            pframe.src = s_node_id;
+            pframe.cmd = UMESH_CMD_POWER_BEACON;
+            pframe.flags = UMESH_FLAG_PRIO_NORMAL;
+            pframe.seq_num = next_seq();
+            pframe.hop_count = UMESH_MAX_HOP_COUNT;
+            pframe.payload_len = 6;
+            pframe.payload[0] = (uint8_t)(s_light_sleep_interval_ms & 0xFF);
+            pframe.payload[1] = (uint8_t)(s_light_sleep_interval_ms >> 8);
+            pframe.payload[2] = (uint8_t)(s_light_listen_window_ms & 0xFF);
+            pframe.payload[3] = (uint8_t)(s_light_listen_window_ms >> 8);
+            pframe.payload[4] = 10; /* slot_count */
+            pframe.payload[5] = 0;  /* my_slot */
+            mac_send(&pframe);
+            s_last_power_beacon_ms = now_ms;
+        }
+
+        if (s_role_cfg == UMESH_ROLE_AUTO &&
+            s_role == UMESH_ROLE_COORDINATOR &&
+            now_ms - s_last_election_result_ms >= UMESH_ELECTION_RESULT_ANNOUNCE_MS) {
+            discovery_broadcast_election_result();
+            s_last_election_result_ms = now_ms;
+        }
+
         if (s_routing_mode == UMESH_ROUTING_GRADIENT) {
             if (s_role == UMESH_ROLE_COORDINATOR) {
                 discovery_gradient_set_distance(0);
@@ -411,6 +477,24 @@ void net_tick(uint32_t now_ms)
         s_role != UMESH_ROLE_COORDINATOR) {
         if (now_ms - s_last_coord_seen_ms > UMESH_NODE_TIMEOUT_MS) {
             enter_scanning();
+        }
+    }
+
+    if (s_role_cfg == UMESH_ROLE_AUTO &&
+        s_state == UMESH_STATE_CONNECTED &&
+        s_role == UMESH_ROLE_COORDINATOR &&
+        discovery_get_role() != UMESH_ROLE_COORDINATOR) {
+        s_role = UMESH_ROLE_ROUTER;
+        s_node_id = discovery_get_node_id();
+        mac_set_node_id(s_node_id);
+        if (s_node_id == UMESH_ADDR_UNASSIGNED) {
+            s_state = UMESH_STATE_JOINING;
+            s_state_enter_ms = now_ms;
+            s_last_join_ms = now_ms;
+            discovery_join();
+        } else {
+            routing_add(UMESH_ADDR_COORDINATOR, UMESH_ADDR_COORDINATOR,
+                        1, UMESH_RSSI_GOOD, now_ms);
         }
     }
 }

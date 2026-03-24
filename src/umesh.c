@@ -3,6 +3,7 @@
 #include "phy/phy_hal.h"
 #include "mac/mac.h"
 #include "net/net.h"
+#include "power/power.h"
 #include "sec/sec.h"
 #include <string.h>
 #ifdef UMESH_PORT_ESP32
@@ -119,6 +120,19 @@ umesh_result_t umesh_init(const umesh_cfg_t *cfg)
     if (s_cfg.gradient_jitter_max_ms == 0) {
         s_cfg.gradient_jitter_max_ms = UMESH_GRADIENT_JITTER_MAX_MS;
     }
+    if ((int)s_cfg.power_mode < (int)UMESH_POWER_ACTIVE ||
+        (int)s_cfg.power_mode > (int)UMESH_POWER_DEEP) {
+        s_cfg.power_mode = UMESH_POWER_ACTIVE;
+    }
+    if (s_cfg.light_sleep_interval_ms == 0) {
+        s_cfg.light_sleep_interval_ms = UMESH_LIGHT_SLEEP_INTERVAL_MS;
+    }
+    if (s_cfg.light_listen_window_ms == 0) {
+        s_cfg.light_listen_window_ms = UMESH_LIGHT_LISTEN_WINDOW_MS;
+    }
+    if (s_cfg.deep_sleep_tx_interval_ms == 0) {
+        s_cfg.deep_sleep_tx_interval_ms = UMESH_DEEP_SLEEP_TX_INTERVAL_MS;
+    }
     if (s_cfg.scan_ms == 0) s_cfg.scan_ms = UMESH_DISCOVER_TIMEOUT_MS;
     if (s_cfg.election_ms == 0) s_cfg.election_ms = UMESH_ELECTION_TIMEOUT_MS;
 
@@ -175,6 +189,11 @@ umesh_result_t umesh_init(const umesh_cfg_t *cfg)
                     have_local_mac ? local_mac : NULL);
     net_config_routing(s_cfg.routing, s_cfg.gradient_beacon_ms,
                        s_cfg.gradient_jitter_max_ms);
+    net_config_power(s_cfg.power_mode, s_cfg.light_sleep_interval_ms,
+                     s_cfg.light_listen_window_ms);
+    power_init(s_cfg.power_mode, s_cfg.light_sleep_interval_ms,
+               s_cfg.light_listen_window_ms, s_cfg.deep_sleep_tx_interval_ms,
+               s_cfg.on_sleep, s_cfg.on_wake);
 
     net_set_rx_callback(on_net_rx);
 
@@ -294,6 +313,7 @@ void umesh_tick(uint32_t now_ms)
 {
     if (!s_initialized) return;
     net_tick(now_ms);
+    power_tick(now_ms, net_get_role());
     notify_state_changes();
 }
 
@@ -344,6 +364,36 @@ umesh_neighbor_t umesh_get_neighbor(uint8_t index)
         out.rssi = -127;
     }
     return out;
+}
+
+umesh_result_t umesh_set_power_mode(umesh_power_mode_t mode)
+{
+    if (!s_initialized) return UMESH_ERR_NOT_INIT;
+    s_cfg.power_mode = mode;
+    net_config_power(mode, s_cfg.light_sleep_interval_ms,
+                     s_cfg.light_listen_window_ms);
+    return power_set_mode(mode);
+}
+
+umesh_power_mode_t umesh_get_power_mode(void)
+{
+    return power_get_mode();
+}
+
+umesh_result_t umesh_deep_sleep_cycle(void)
+{
+    if (!s_initialized) return UMESH_ERR_NOT_INIT;
+    return power_deep_sleep_cycle(s_cfg.routing, net_get_role());
+}
+
+float umesh_estimate_current_ma(void)
+{
+    return power_estimate_current_ma();
+}
+
+umesh_power_stats_t umesh_get_power_stats(void)
+{
+    return power_get_stats();
 }
 
 const char *umesh_err_str(umesh_result_t err)

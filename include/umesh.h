@@ -23,8 +23,12 @@ typedef struct {
     uint8_t          channel;
     uint8_t          tx_power;
     umesh_routing_mode_t routing;
+    umesh_power_mode_t power_mode;
     uint32_t         gradient_beacon_ms;
     uint32_t         gradient_jitter_max_ms;
+    uint32_t         light_sleep_interval_ms;
+    uint32_t         light_listen_window_ms;
+    uint32_t         deep_sleep_tx_interval_ms;
     uint32_t         scan_ms;
     uint32_t         election_ms;
     void           (*on_joined)(uint8_t node_id);
@@ -32,6 +36,8 @@ typedef struct {
     void           (*on_node_joined)(uint8_t node_id);
     void           (*on_node_left)(uint8_t node_id);
     void           (*on_gradient_ready)(uint8_t distance);
+    void           (*on_sleep)(void);
+    void           (*on_wake)(void);
     void           (*on_error)(umesh_result_t err);
 } umesh_cfg_t;
 
@@ -93,6 +99,11 @@ umesh_routing_mode_t umesh_get_routing_mode(void);
 umesh_result_t umesh_gradient_refresh(void);
 uint8_t       umesh_get_neighbor_count(void);
 umesh_neighbor_t umesh_get_neighbor(uint8_t index);
+umesh_result_t umesh_set_power_mode(umesh_power_mode_t mode);
+umesh_power_mode_t umesh_get_power_mode(void);
+umesh_result_t umesh_deep_sleep_cycle(void);
+float         umesh_estimate_current_ma(void);
+umesh_power_stats_t umesh_get_power_stats(void);
 umesh_stats_t umesh_get_stats(void);
 void          umesh_tick(uint32_t now_ms);
 const char   *umesh_err_str(umesh_result_t err);

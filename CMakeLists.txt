@@ -24,6 +24,7 @@ set(UMESH_SOURCES
     src/net/net.c
     src/net/routing.c
     src/net/discovery.c
+    src/power/power.c
     src/sec/sec.c
     src/sec/keys.c
     src/common/crc.c
@@ -41,8 +42,10 @@ endif()
 
 if(UMESH_PORT STREQUAL "esp32")
     target_sources(umesh PRIVATE port/esp32/phy_esp32.c)
+    target_sources(umesh PRIVATE port/esp32/power_esp32.c)
 else()
     target_sources(umesh PRIVATE port/posix/phy_posix.c)
+    target_sources(umesh PRIVATE port/posix/power_posix.c)
     message(STATUS "uMesh: POSIX port (testing)")
 endif()
 

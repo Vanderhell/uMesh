@@ -12,6 +12,9 @@ void           net_config_auto(uint32_t scan_ms,
 void           net_config_routing(umesh_routing_mode_t routing_mode,
                                   uint32_t gradient_beacon_ms,
                                   uint32_t gradient_jitter_max_ms);
+void           net_config_power(umesh_power_mode_t power_mode,
+                                uint32_t light_interval_ms,
+                                uint32_t light_listen_window_ms);
 umesh_result_t net_join(void);
 void           net_leave(void);
 umesh_result_t net_route(umesh_frame_t *frame);

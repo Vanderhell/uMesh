@@ -8,7 +8,7 @@
 
 /* ── Version ───────────────────────────────── */
 #define UMESH_VERSION_MAJOR    1
-#define UMESH_VERSION_MINOR    2
+#define UMESH_VERSION_MINOR    3
 #define UMESH_VERSION_PATCH    0
 
 /* ── Addresses ─────────────────────────────── */
@@ -53,6 +53,10 @@
 #define UMESH_GRADIENT_BEACON_MS 30000
 #define UMESH_GRADIENT_JITTER_MAX_MS 200
 #define UMESH_NEIGHBOR_TIMEOUT_MS 30000
+#define UMESH_POWER_BEACON_MS 1000
+#define UMESH_LIGHT_SLEEP_INTERVAL_MS 1000
+#define UMESH_LIGHT_LISTEN_WINDOW_MS 100
+#define UMESH_DEEP_SLEEP_TX_INTERVAL_MS 30000
 
 /* ── TX power ──────────────────────────────── */
 #define UMESH_TX_POWER_MAX     78
@@ -94,6 +98,12 @@ typedef enum {
     UMESH_ROUTING_DISTANCE_VECTOR = 0,
     UMESH_ROUTING_GRADIENT        = 1,
 } umesh_routing_mode_t;
+
+typedef enum {
+    UMESH_POWER_ACTIVE = 0,
+    UMESH_POWER_LIGHT  = 1,
+    UMESH_POWER_DEEP   = 2,
+} umesh_power_mode_t;
 
 /* ── FLAGS ─────────────────────────────────── */
 #define UMESH_FLAG_ACK_REQ     (1 << 0)
@@ -148,6 +158,7 @@ typedef enum {
     UMESH_CMD_ELECTION_RESULT = 0x58,
     UMESH_CMD_GRADIENT_BEACON = 0x59,
     UMESH_CMD_GRADIENT_UPDATE = 0x5A,
+    UMESH_CMD_POWER_BEACON    = 0x5B,
     UMESH_CMD_USER_BASE     = 0xE0,
     UMESH_CMD_RAW           = 0xFF,
 } umesh_cmd_t;
@@ -158,6 +169,14 @@ typedef struct {
     int8_t   rssi;
     uint32_t last_seen_ms;
 } umesh_neighbor_t;
+
+typedef struct {
+    uint32_t sleep_count;
+    uint32_t total_sleep_ms;
+    uint32_t total_active_ms;
+    float    duty_cycle_pct;
+    float    estimated_ma;
+} umesh_power_stats_t;
 
 /* ── Internal frame ────────────────────────── */
 typedef struct {
