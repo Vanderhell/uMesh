@@ -33,8 +33,18 @@ static uint8_t          s_cmd_len = 0;
 static void json_ready(uint8_t node_id) {
     Serial.printf("{\"event\":\"ready\","
                   "\"data\":{\"role\":\"router\","
-                  "\"node_id\":%u,\"channel\":%d}}\n",
-                  node_id, CHANNEL);
+                  "\"state\":\"connected\","
+                  "\"node_id\":%u,\"channel\":%d,\"net_id\":%d}}\n",
+                  node_id, CHANNEL, NET_ID);
+}
+
+static void json_status(void) {
+    umesh_info_t info = umesh_get_info();
+    Serial.printf("{\"event\":\"status\","
+                  "\"data\":{\"role\":\"router\","
+                  "\"state\":\"connected\","
+                  "\"node_id\":%u,\"channel\":%u,\"net_id\":%u}}\n",
+                  info.node_id, info.channel, info.net_id);
 }
 
 static void json_tx(uint8_t dst, uint8_t cmd, uint8_t size) {
@@ -56,6 +66,11 @@ static void json_error(umesh_result_t code) {
 }
 
 static void handle_serial_command(const char *cmd) {
+    if (strcmp(cmd, "STATUS") == 0) {
+        json_status();
+        return;
+    }
+
     if (strcmp(cmd, "READY") == 0) {
         json_ready(umesh_get_info().node_id);
     }

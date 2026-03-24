@@ -138,16 +138,22 @@ class Dashboard:
             s.alive      = True
             s.last_event = etype
 
-            if etype == "ready":
-                s.node_id  = data.get("node_id")
-                s.channel  = data.get("channel")
-                s.net_id   = data.get("net_id")
-                s.fw_state = "ready"
+            if etype in ("ready", "status"):
+                s.node_id = data.get("node_id", s.node_id)
+                s.channel = data.get("channel", s.channel)
+                s.net_id = data.get("net_id", s.net_id)
+                s.fw_state = data.get("state", "connected")
+                if s.fw_state == "connected" and s.node_id is not None:
+                    s.joined = True
 
             elif etype == "joined":
-                s.joined   = True
-                s.node_id  = data.get("node_id", s.node_id)
-                s.fw_state = "joined"
+                s.join_sent = True
+                s.assign_recvd = True
+                s.joined = True
+                s.node_id = data.get("node_id", s.node_id)
+                s.channel = data.get("channel", s.channel)
+                s.net_id = data.get("net_id", s.net_id)
+                s.fw_state = "connected"
 
             elif etype == "tx":
                 s.tx += 1
@@ -158,7 +164,10 @@ class Dashboard:
             elif etype == "rx":
                 s.rx += 1
                 if "rssi" in data:
-                    s.last_rssi = data["rssi"]
+                    try:
+                        s.last_rssi = int(data["rssi"])
+                    except (TypeError, ValueError):
+                        pass
                 cmd = str(data.get("cmd", "")).lower()
                 if cmd == "0x51":   # ASSIGN
                     s.assign_recvd = True
@@ -233,6 +242,7 @@ class Dashboard:
             # State
             state_color = {
                 "ready":  "cyan",
+                "connected": "green",
                 "joined": "green",
                 "done":   "green",
                 "—":      "dim",
@@ -422,6 +432,19 @@ def main(coordinator: str, router: str, end_node: str,
     if request_ready or start_tests:
         for dev in devices.values():
             dev.clear_events()
+
+    click.echo("Requesting STATUS from connected devices...")
+    for role, dev in devices.items():
+        try:
+            dev.send_command("STATUS")
+            click.echo(f"  {role:12s}  STATUS OK")
+        except Exception as exc:
+            click.echo(f"  {role:12s}  STATUS FAILED: {exc}", err=True)
+            try:
+                dev.send_command("READY")
+                click.echo(f"  {role:12s}  READY  fallback OK")
+            except Exception as exc2:
+                click.echo(f"  {role:12s}  READY  fallback FAILED: {exc2}", err=True)
 
     if request_ready:
         click.echo("Sending READY command to connected devices...")

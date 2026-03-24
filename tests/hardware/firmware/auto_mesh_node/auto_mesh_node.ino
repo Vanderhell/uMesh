@@ -6,6 +6,7 @@
  */
 
 #include <Arduino.h>
+#include <string.h>
 #include "../../../../include/umesh.h"
 
 #define NET_ID     0x01
@@ -19,11 +20,24 @@ static const uint8_t MASTER_KEY[16] = {
 
 static volatile bool s_send_pong = false;
 static volatile uint8_t s_pong_dst = 0;
+static char s_cmd_buf[16];
+static uint8_t s_cmd_len = 0;
 
 static void json_ready(void) {
     Serial.printf("{\"event\":\"ready\","
-                  "\"data\":{\"mode\":\"auto\",\"node_id\":%u}}\n",
-                  umesh_get_info().node_id);
+                  "\"data\":{\"mode\":\"auto\",\"state\":\"connected\","
+                  "\"node_id\":%u,\"channel\":%u,\"net_id\":%u}}\n",
+                  umesh_get_info().node_id,
+                  umesh_get_info().channel,
+                  umesh_get_info().net_id);
+}
+
+static void json_status(void) {
+    umesh_info_t info = umesh_get_info();
+    Serial.printf("{\"event\":\"status\","
+                  "\"data\":{\"mode\":\"auto\",\"state\":\"connected\","
+                  "\"node_id\":%u,\"channel\":%u,\"net_id\":%u}}\n",
+                  info.node_id, info.channel, info.net_id);
 }
 
 static void json_elected(umesh_role_t role) {
@@ -80,6 +94,25 @@ void setup(void) {
 }
 
 void loop(void) {
+    while (Serial.available() > 0) {
+        char c = (char)Serial.read();
+        if (c == '\n' || c == '\r') {
+            if (s_cmd_len == 0) continue;
+            s_cmd_buf[s_cmd_len] = '\0';
+            if (strcmp(s_cmd_buf, "STATUS") == 0) {
+                json_status();
+            } else if (strcmp(s_cmd_buf, "READY") == 0) {
+                json_ready();
+            }
+            s_cmd_len = 0;
+            continue;
+        }
+
+        if (s_cmd_len < (sizeof(s_cmd_buf) - 1)) {
+            s_cmd_buf[s_cmd_len++] = c;
+        }
+    }
+
     umesh_tick(millis());
 
     if (s_send_pong) {
