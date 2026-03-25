@@ -7,6 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](#)
 [![Platform](https://img.shields.io/badge/platform-ESP32%20%7C%20S2%20%7C%20S3%20%7C%20C3%20%7C%20C6-lightgrey.svg)](#)
 [![Status: v1.4.0](https://img.shields.io/badge/status-v1.4.0-brightgreen.svg)](#)
+[![Actions](https://github.com/Vanderhell/uMesh/actions/workflows/ci.yml/badge.svg)](https://github.com/Vanderhell/uMesh/actions/workflows/ci.yml)
 
 ---
 
@@ -194,16 +195,30 @@ RX current:       ~60 mA @ 3.3V
 
 ## Supported Hardware
 
-| Chip | WiFi | Tested | Notes |
-|------|------|--------|-------|
-| ESP32 | 802.11n | ✓ | Classic |
-| ESP32-S2 | 802.11n | ○ | No BT |
-| ESP32-S3 | 802.11n | ✓ | Recommended |
-| ESP32-C3 | 802.11n | ✓ | Budget option |
-| ESP32-C6 | 802.11ax | ○ | WiFi 6, TWT-ready |
-| ESP32-H2 | — | ✗ | No WiFi |
+| Chip | Support | Reason |
+|------|---------|--------|
+| ESP32 | ✓ Full | Classic, fully tested |
+| ESP32-S2 | ✓ Full | No BT, otherwise identical |
+| ESP32-S3 | ✓ Full | Recommended, dual-core |
+| ESP32-C3 | ✓ Full | Budget option, RISC-V |
+| ESP32-C6 | ✓ Full | WiFi 6, best power mgmt |
+| ESP32-H2 | ✗ Not supported | No WiFi (802.15.4 only) |
+| ESP32-C2 | ✗ Not supported | Insufficient RAM |
+| ESP8266 | ✗ Not supported | No raw 802.11 TX API |
+| ESP8285 | ✗ Not supported | Same as ESP8266 |
 
-✓ = hardware tested  ○ = compile-tested  ✗ = not supported
+> **Why ESP8266 is not supported:**
+> ESP8266 lacks `esp_wifi_80211_tx()` - the API required
+> to send raw 802.11 frames. Only promiscuous RX is
+> available, making it impossible to be an active mesh node.
+>
+> **Why ESP32-H2 is not supported:**
+> ESP32-H2 uses 802.15.4 radio (Zigbee/Thread) instead
+> of WiFi. µMesh requires WiFi hardware.
+>
+> **Why ESP32-C2 is not supported:**
+> ESP32-C2 has insufficient RAM (272KB) for the full
+> µMesh stack.
 
 ---
 
