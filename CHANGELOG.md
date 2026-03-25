@@ -47,6 +47,63 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-03-24
+
+### Added
+
+- New compile-time target capability header: `include/umesh_caps.h`
+- ESP32 target matrix for ESP32 / S2 / S3 / C3 / C6
+- Unsupported target guards for ESP32-H2 and ESP32-C2
+- Runtime capability API:
+  - `umesh_get_target()`
+  - `umesh_get_wifi_gen()`
+  - `umesh_target_supports(...)`
+- Extended `umesh_info_t` with target metadata (`target`, `wifi_gen`, `tx_power_max`)
+- ESP32-C6 TWT stub (`port/esp32/twt_esp32c6.c`)
+- New capability tests (`tests/test_caps.c`)
+- New target info example (`examples/target_info/`)
+
+### Changed
+
+- Target-aware CMake source selection for ESP32-C6 TWT stub
+- `UMESH_LOW_MEMORY` compile option support
+
+### Verified
+
+- Full POSIX test matrix passes with power management ON and OFF
+
+## [1.3.0] - 2026-03-24
+
+### Added
+
+- Compile-time power feature flag: `UMESH_ENABLE_POWER_MANAGEMENT`
+- Runtime power profiles: `ACTIVE`, `LIGHT`, `DEEP`
+- Power API (`umesh_set_power_mode`, `umesh_get_power_mode`, `umesh_deep_sleep_cycle`,
+  statistics, current estimate)
+- Coordinator `POWER_BEACON` command for sleep profile signaling
+- ESP32 + POSIX power HAL implementations
+- Deep sleep sensor example (`examples/deep_sleep_sensor/`)
+- Power documentation (`docs/POWER_MANAGEMENT.md`)
+
+### Changed
+
+- With `-DUMESH_ENABLE_POWER_MANAGEMENT=OFF`, power API remains available via no-op stubs
+- Test matrix verified for both PM enabled and disabled
+
+## [1.2.1] - 2026-03-24
+
+### Fixed
+
+- Split-brain convergence in auto coordinator election
+- Auto-router transition from election to connected state
+- Coordinator route refresh timestamps (prevents intermittent `NOT_ROUTABLE`)
+- Dashboard/device serial robustness for late-connect status handshake
+
+### Verified
+
+- 3-node auto-mesh runtime stabilized (1 coordinator + 2 routers)
+- 120s hardware capture with active traffic and zero error events
+
 ## [1.1.0] - 2026-03-24
 
 ### Added
