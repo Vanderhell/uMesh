@@ -259,13 +259,6 @@ umesh_result_t umesh_send(uint8_t dst, uint8_t cmd,
         memcpy(frame.payload, payload, len);
     }
 
-    /* Encrypt if security is enabled */
-    if (s_cfg.security != UMESH_SEC_NONE &&
-        s_cfg.master_key) {
-        r = sec_encrypt_frame(&frame);
-        if (r != UMESH_OK) return r;
-    }
-
     r = net_route(&frame);
     if (r == UMESH_OK) s_stats.tx_count++;
     return r;

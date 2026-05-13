@@ -56,9 +56,15 @@ add_executable(test_mac
     ../src/common/crc.c
     ../src/common/ring.c
     ../src/phy/phy.c
+    ../src/sec/sec.c
+    ../src/sec/keys.c
     ../port/posix/phy_posix.c
 )
 target_include_directories(test_mac PRIVATE ../src ../include ../port/posix)
+if(UMESH_USE_MICROCRYPT)
+    target_compile_definitions(test_mac PRIVATE UMESH_USE_MICROCRYPT=1)
+    target_link_libraries(test_mac PRIVATE microcrypt)
+endif()
 add_test(NAME test_mac COMMAND test_mac)
 
 # ── test_routing ─────────────────────────────────────────

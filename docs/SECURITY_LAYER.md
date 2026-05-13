@@ -32,8 +32,9 @@ NONCE (16 bytes):
 |  1B    |  1B    |   2B    |    3B    |     9B      |
 +--------+--------+---------+----------+-------------+
 
-SALT = first 3 bytes of SHA-256(ENC_KEY)
-     = constant derived from the key
+SALT derivation (implementation detail, `src/sec/sec.c`):
+- When `UMESH_USE_MICROCRYPT` is enabled: `SALT = first 3 bytes of SHA-256(ENC_KEY)`
+- When the built-in fallback is used (no microcrypt): `SALT = first 3 bytes of HMAC-SHA256(ENC_KEY, ENC_KEY)`
 ```
 
 All fields except SALT are already in the packet — **zero extra overhead.**
@@ -41,10 +42,11 @@ All fields except SALT are already in the packet — **zero extra overhead.**
 ### SEQ_NUM overflow protection
 
 ```c
-/* On SEQ_NUM overflow -> regenerate SALT */
-if (++s_seq_num > 0x0FFF) {
-    s_seq_num = 0;
+/* Sequence is masked to 12 bits; wrap regenerates SALT (see src/net/net.c). */
+s_seq_num = (uint16_t)((s_seq_num + 1u) & 0x0FFF);
+if (s_seq_num == 0) {
     sec_regenerate_salt();
+    s_seq_num = 1;
 }
 ```
 
@@ -62,12 +64,8 @@ MIC = first 4 bytes of HMAC-SHA256(
 MIC covers the header too — an attacker cannot change the address or SEQ_NUM.
 
 **Why 4 bytes:**
-```
-32 bytes (full HMAC) = excessive overhead
-4 bytes = 2^32 combinations
-        + SEQ_NUM replay protection
-        = practically unbreakable for this use case
-```
+
+This is a size/overhead trade-off. A 4-byte truncated MIC reduces integrity margin compared to a full-length HMAC. This repository does not include a formal threat model or security proof for the truncation.
 
 **Operation order (Encrypt-then-MAC):**
 ```
@@ -142,7 +140,7 @@ typedef enum {
 [802.11 HEADER]  ->  no (hardware routing)
 [UMESH MAC HDR]  ->  no (software routing)
 [UMESH NET HDR]  ->  no (software routing)
-[OPCODE       ]  ->  YES ENCRYPTED
+[OPCODE / CMD ]  ->  NO (not encrypted)
 [PAYLOAD      ]  ->  YES ENCRYPTED
 [MIC          ]  ->  HMAC of (header + encrypted data)
 [CRC16        ]  ->  no (PHY/MAC)

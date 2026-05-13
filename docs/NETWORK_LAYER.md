@@ -32,13 +32,13 @@ Reserved node IDs:
 `UMESH_ROUTING_DISTANCE_VECTOR` (default):
 - route table per destination
 - good for smaller networks and bidirectional traffic
-- practical range: up to ~10 nodes
+ - node-count scalability depends on RF conditions, traffic patterns, and implementation limits (**NOT VERIFIED** by measurement)
 
 `UMESH_ROUTING_GRADIENT`:
 - each node tracks only one value: hop distance to coordinator
 - packets to coordinator move uphill through neighbors with lower distance
 - good for many-to-one sensor collection
-- practical range: 10-100+ nodes
+ - scalability claims (node counts / density) are **NOT VERIFIED** by measurement
 
 ### Gradient beacon propagation
 

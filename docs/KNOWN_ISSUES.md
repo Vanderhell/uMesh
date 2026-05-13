@@ -455,9 +455,9 @@ US (FCC):   Depends on channel -> ESP32 within limits OK
 Other:      Check local regulations
 ```
 
-ESP32 is certified for most regions — using it within its parameters is legal.
+This repository does not provide regulatory compliance assurance. Regulatory limits and certification scope depend on module variant, antenna, enclosure, firmware configuration, and jurisdiction.
 
-**Status:** ✅ ESP32 certification covers normal use
+**Status:** NOT VERIFIED (no compliance evidence in this repository/run)
 
 ---
 
@@ -466,9 +466,9 @@ ESP32 is certified for most regions — using it within its parameters is legal.
 **Problem:**
 Sending raw 802.11 frames is technically not compliant with the IEEE 802.11 standard — frames lack proper AP association.
 
-In practice this is a non-issue — the same applies to ESP-NOW, Wireshark monitor mode, etc.
+This repository does not provide a compliance analysis for raw frame transmission. Treat regulatory/standards compliance as deployment-specific and obtain appropriate guidance.
 
-**Status:** ⚪ Academic concern — irrelevant in practice
+**Status:** NOT VERIFIED
 
 ---
 

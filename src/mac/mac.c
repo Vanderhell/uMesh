@@ -2,6 +2,7 @@
 #include "cca.h"
 #include "frame.h"
 #include "../phy/phy.h"
+#include "../sec/sec.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -130,6 +131,14 @@ static void on_phy_rx(const uint8_t *buf, uint8_t len, int8_t rssi)
 
     /* Deliver to upper layer */
     if (s_rx_cb) {
+        if (!(frame.flags & UMESH_FLAG_IS_ACK)) {
+            r = sec_decrypt_frame(&frame);
+            if (r != UMESH_OK) {
+                s_stats.drop_count++;
+                cca_set_rx_in_progress(false);
+                return;
+            }
+        }
         s_rx_cb(&frame, rssi);
     }
 
@@ -170,6 +179,11 @@ umesh_result_t mac_send(umesh_frame_t *frame)
 
     needs_ack = (frame->flags & UMESH_FLAG_ACK_REQ) &&
                 (frame->dst != UMESH_ADDR_BROADCAST);
+
+    if (!(frame->flags & UMESH_FLAG_IS_ACK)) {
+        r = sec_encrypt_frame(frame);
+        if (r != UMESH_OK) return r;
+    }
 
     r = frame_serialize(frame, buf, sizeof(buf), &len);
     if (r != UMESH_OK) return r;

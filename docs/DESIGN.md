@@ -98,7 +98,7 @@ Overhead on every connection — unsuitable for MCUs with infrequent packets.
 
 ---
 
-## Why Hamming(7,4) FEC?
+## FEC (NOT IMPLEMENTED)
 
 | FEC | Advantages | Disadvantages |
 |---|---|---|
@@ -106,7 +106,7 @@ Overhead on every connection — unsuitable for MCUs with infrequent packets.
 | **Hamming(7,4)** | **Simple, bitwise ops** | **Corrects 1 bit per 7** |
 | No FEC | No overhead | No correction |
 
-For raw 802.11 in typical environments, Hamming(7,4) is sufficient. 802.11 has its own CRC and retransmissions at the physical layer.
+The repository currently does **not** contain an FEC implementation (no Hamming/Reed-Solomon code paths in `src/`). Any mention of FEC should be treated as **PLANNED** unless and until code is added and tested.
 
 ---
 
@@ -125,9 +125,7 @@ CTR mode turns a block cipher into a stream cipher. The NONCE is derived from SE
 
 ```
 Full HMAC-SHA256 = 32 bytes -> excessive overhead
-4 bytes = 2^32 combinations
-        + SEQ_NUM replay protection
-        = practically unbreakable for this use case
+4 bytes reduces overhead, but also reduces integrity margin compared to full-length HMAC. This repository does not include a formal threat model or proof for the truncation.
 ```
 
 ---

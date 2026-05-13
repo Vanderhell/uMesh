@@ -82,20 +82,22 @@ bool umesh_cca_channel_free(void) {
 
 /* Derived:
  * CCA time     = 2 ms
- * ACK timeout  = 50 ms  (raw 802.11 latency ~1-5 ms)
+ * ACK timeout  = 50 ms  (chosen constant; timing rationale below is NOT VERIFIED by measurement)
  * Max backoff  = 32 ms  */
 ```
 
 ### Why 50 ms ACK timeout?
 
 ```
-raw 802.11 latency:   ~1-5 ms
-RX processing:        ~2 ms
-ACK generation:       ~1 ms
-ACK transmission:     ~2 ms
-Safety margin:       ~40 ms
+Timing breakdown below is an estimate and is **NOT VERIFIED** by measurement in this repository/run:
+
+raw 802.11 latency:   ~1-5 ms (NOT VERIFIED)
+RX processing:        ~2 ms   (NOT VERIFIED)
+ACK generation:       ~1 ms   (NOT VERIFIED)
+ACK transmission:     ~2 ms   (NOT VERIFIED)
+Safety margin:       ~40 ms   (NOT VERIFIED)
 ----------------------------
-ACK timeout:          50 ms
+ACK timeout:          50 ms   (constant in `src/common/defs.h`)
 ```
 
 ---

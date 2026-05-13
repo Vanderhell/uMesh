@@ -285,33 +285,21 @@ RSSI is used in the Network layer for:
 
 ---
 
-## 8. Performance and range
+## 8. Performance and range (NOT VERIFIED)
 
-### TX power configuration
+This repository does not include reproducible RF measurement reports. Any range/latency/throughput claims must be backed by measurement artifacts and linked.
+
+### TX power configuration (code-visible)
+
+The ESP32 port configures TX power via ESP-IDF APIs (see `port/esp32/phy_esp32.c`). Example API used:
 
 ```c
-/* ESP32 supports configurable TX power
- * Range: 2 dBm to 20 dBm */
-
-esp_wifi_set_max_tx_power(78);  /* 78 = 19.5 dBm (maximum) */
-
-/* Values:
- *  8 =  2 dBm  (minimum, ~10m)
- * 40 = 10 dBm  (~80m)
- * 78 = 19.5 dBm (maximum, ~200m) */
+esp_wifi_set_max_tx_power(...);
 ```
 
-### Real-world range
-
-```
-TX power 20 dBm, open space:
-  Direct range:     ~200 m
-  Through 1 wall:   ~80 m
-  Through 2 walls:  ~30 m
-
-With multi-hop (3 nodes):
-  Total range:      ~500 m+
-```
+NOT VERIFIED in this repository/run:
+- exact mapping between the integer argument and dBm for specific ESP32 variants
+- real-world range as a function of TX power, antenna, channel, environment, and regulatory constraints
 
 ---
 
