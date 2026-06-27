@@ -8,7 +8,9 @@
 
 static int s_pass = 0;
 static int s_fail = 0;
+#if UMESH_ENABLE_POWER_MANAGEMENT
 static uint32_t s_wake_count = 0;
+#endif
 
 #define TEST_ASSERT(cond, name) \
     do { \
