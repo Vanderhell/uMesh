@@ -29,9 +29,7 @@ static void rx_cb(const uint8_t *payload, uint8_t len, int8_t rssi)
     s_rx_len  = len;
     s_rx_rssi = rssi;
     s_rx_count++;
-    if (len <= 255) {
-        memcpy(s_rx_buf, payload, len);
-    }
+    memcpy(s_rx_buf, payload, len);
 }
 
 static void test_loopback_basic(void)

@@ -68,9 +68,6 @@ static void record_rx_c(const umesh_frame_t *frame, int8_t rssi)
 static void capture_forward(const uint8_t *payload, uint8_t len, int8_t rssi)
 {
     (void)rssi;
-    if (len > sizeof(s_forward_buf)) {
-        return;
-    }
     memcpy(s_forward_buf, payload, len);
     s_forward_len = len;
     s_forward_count++;

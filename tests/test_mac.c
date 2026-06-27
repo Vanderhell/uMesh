@@ -372,11 +372,6 @@ static void test_broadcast_does_not_create_ack_responses(void)
     TEST_ASSERT(mac_get_stats().ack_count == 0, "broadcast: no ACKs generated");
 }
 
-static void delay_record_only(uint32_t duration_ms)
-{
-    s_delay_samples[s_delay_sample_count++] = duration_ms;
-}
-
 static void test_two_contexts_have_independent_backoff_state(void)
 {
     umesh_ctx_t ctx_a;

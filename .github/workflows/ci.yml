@@ -146,5 +146,6 @@ jobs:
       - name: Build
         working-directory: port/esp32/smoke
         run: |
+          . /opt/esp/idf/export.sh
           idf.py set-target esp32c6
           idf.py build

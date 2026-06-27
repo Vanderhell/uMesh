@@ -58,9 +58,6 @@ static umesh_frame_t make_gradient_beacon(uint8_t src, uint8_t distance)
 static void capture_forward(const uint8_t *payload, uint8_t len, int8_t rssi)
 {
     (void)rssi;
-    if (len > sizeof(s_forward_buf)) {
-        return;
-    }
     memcpy(s_forward_buf, payload, len);
     s_forward_len = len;
     s_forward_count++;

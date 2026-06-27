@@ -144,7 +144,7 @@ static void test_maximum_legal_frame(void)
 
 static void test_truncation_boundaries(void)
 {
-    umesh_frame_t orig, out;
+    umesh_frame_t orig;
     uint8_t buf[128];
     size_t len = 0;
     size_t i;
