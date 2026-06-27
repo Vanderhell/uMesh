@@ -31,8 +31,16 @@ See:
 
 ## Version consistency
 
-**Implemented version in code:** `1.4.0` (`src/common/defs.h` defines `UMESH_VERSION_MAJOR/MINOR/PATCH`).  
-NOT VERIFIED: Git tags / GitHub releases in this run (no network access).
+**Package / release version currently implemented in code:** `1.4.0` (`src/common/defs.h` defines `UMESH_VERSION_MAJOR/MINOR/PATCH`).
+`v1.4.0` is historical and remains unchanged.
+
+**Next project release target:** `v1.5.0`
+This target is separate from the wire protocol version and is not created until release gates are green.
+
+**Wire protocol version:** `UMESH_WIRE_VERSION` in `include/umesh.h`
+This field is independent from the package/release tag.
+
+NOT VERIFIED: Git tags / GitHub releases in this run beyond local `git` inspection.
 
 ## Getting started (API)
 

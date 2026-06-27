@@ -90,7 +90,7 @@ umesh/
 
 /* ---- Version ------------------------------------------------- */
 #define UMESH_VERSION_MAJOR    1
-#define UMESH_VERSION_MINOR    0
+#define UMESH_VERSION_MINOR    4
 #define UMESH_VERSION_PATCH    0
 
 /* ---- Addresses ----------------------------------------------- */
