@@ -44,13 +44,19 @@ bool routing_add(uint8_t dst, uint8_t next_hop,
 
     entry = find_entry(ctx, dst);
     if (entry) {
-        if (metric < entry->metric) {
+        if (entry->next_hop == next_hop) {
+            if (metric < entry->metric) {
+                entry->next_hop    = next_hop;
+                entry->hop_count   = hops;
+                entry->last_rssi   = rssi;
+                entry->metric      = metric;
+            }
+            entry->last_seen_ms = now_ms;
+        } else if (metric < entry->metric) {
             entry->next_hop    = next_hop;
             entry->hop_count   = hops;
             entry->last_rssi   = rssi;
             entry->metric      = metric;
-            entry->last_seen_ms = now_ms;
-        } else {
             entry->last_seen_ms = now_ms;
         }
         return true;
@@ -92,7 +98,8 @@ void routing_expire(uint32_t now_ms)
     uint8_t i;
     for (i = 0; i < UMESH_MAX_ROUTES; i++) {
         if (!ctx->routing.table[i].valid) continue;
-        if (now_ms - ctx->routing.table[i].last_seen_ms > UMESH_NODE_TIMEOUT_MS) {
+        if (now_ms >= ctx->routing.table[i].last_seen_ms &&
+            now_ms - ctx->routing.table[i].last_seen_ms > UMESH_NODE_TIMEOUT_MS) {
             ctx->routing.table[i].valid = false;
         }
     }
@@ -186,7 +193,8 @@ void neighbor_expire(uint32_t now_ms)
     uint8_t i;
     for (i = 0; i < UMESH_MAX_NEIGHBORS; i++) {
         if (ctx->routing.neighbors[i].node_id == UMESH_ADDR_BROADCAST) continue;
-        if (now_ms - ctx->routing.neighbors[i].last_seen_ms > UMESH_NEIGHBOR_TIMEOUT_MS) {
+        if (now_ms >= ctx->routing.neighbors[i].last_seen_ms &&
+            now_ms - ctx->routing.neighbors[i].last_seen_ms > UMESH_NEIGHBOR_TIMEOUT_MS) {
             ctx->routing.neighbors[i].node_id = UMESH_ADDR_BROADCAST;
             ctx->routing.neighbors[i].distance = UINT8_MAX;
             ctx->routing.neighbors[i].rssi = -127;

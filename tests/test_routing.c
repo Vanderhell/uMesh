@@ -66,6 +66,19 @@ static void test_routing_best_route_kept(void)
     TEST_ASSERT(out.next_hop == 0x04, "best-route: better metric replaces (via 0x04)");
 }
 
+static void test_routing_worse_route_does_not_refresh_stale_path(void)
+{
+    umesh_route_entry_t out;
+
+    routing_init();
+    routing_add(0x07, 0x01, 1, -55, 0);
+    routing_add(0x07, 0x02, 2, -90, UMESH_NODE_TIMEOUT_MS + 1);
+    routing_expire(UMESH_NODE_TIMEOUT_MS + 2);
+
+    TEST_ASSERT(!routing_find(0x07, &out),
+                "stale-path: worse route does not refresh expired entry");
+}
+
 static void test_routing_expire(void)
 {
     umesh_route_entry_t out;
@@ -115,6 +128,7 @@ int main(void)
     test_routing_add_find();
     test_routing_metric();
     test_routing_best_route_kept();
+    test_routing_worse_route_does_not_refresh_stale_path();
     test_routing_expire();
     test_routing_remove();
     test_routing_table_full();

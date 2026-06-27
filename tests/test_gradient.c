@@ -2,14 +2,21 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "../src/context.h"
 #include "../src/net/net.h"
 #include "../src/net/routing.h"
 #include "../src/net/discovery.h"
+#include "../src/mac/mac.h"
+#include "../src/phy/phy.h"
 #include "../src/sec/sec.h"
 #include "../src/phy/phy_hal.h"
+#include "../port/posix/phy_posix.h"
 
 static int s_pass = 0;
 static int s_fail = 0;
+static uint8_t s_forward_buf[UMESH_MAX_FRAME_SIZE];
+static size_t s_forward_len = 0;
+static int s_forward_count = 0;
 
 #define TEST_ASSERT(cond, name) \
     do { \
@@ -46,6 +53,33 @@ static umesh_frame_t make_gradient_beacon(uint8_t src, uint8_t distance)
     frame.payload_len = 1;
     frame.payload[0] = distance;
     return frame;
+}
+
+static void capture_forward(const uint8_t *payload, uint8_t len, int8_t rssi)
+{
+    (void)rssi;
+    if (len > sizeof(s_forward_buf)) {
+        return;
+    }
+    memcpy(s_forward_buf, payload, len);
+    s_forward_len = len;
+    s_forward_count++;
+}
+
+static void init_forward_stack(uint8_t node_id)
+{
+    umesh_phy_cfg_t cfg = { .channel = 6, .tx_power = 60, .net_id = 0x01 };
+    phy_hal_init(&cfg);
+    mac_init(node_id);
+    sec_init(TEST_KEY, 0x01, UMESH_SEC_NONE);
+    net_init(0x01, node_id, UMESH_ROLE_ROUTER);
+    net_config_routing(UMESH_ROUTING_GRADIENT, 30000, 200);
+    net_join();
+    phy_posix_set_loopback(true);
+    phy_set_rx_cb(capture_forward);
+    s_forward_count = 0;
+    s_forward_len = 0;
+    memset(s_forward_buf, 0, sizeof(s_forward_buf));
 }
 
 static void test_gradient_beacon_propagation(void)
@@ -157,6 +191,65 @@ static void test_gradient_fallback_to_dv(void)
     TEST_ASSERT(r == UMESH_OK, "gradient: non-coordinator dst falls back to DV");
 }
 
+static void test_gradient_forwards_through_lower_neighbor(void)
+{
+    umesh_frame_t frame;
+    umesh_frame_t forwarded;
+
+    init_forward_stack(0x22);
+    neighbor_init();
+    neighbor_update(0x21, 1, -55, 100);
+    neighbor_update(0x23, 3, -65, 100);
+    discovery_gradient_set_distance(2);
+
+    memset(&frame, 0, sizeof(frame));
+    frame.net_id = 0x01;
+    frame.src = 0x11;
+    frame.dst = UMESH_ADDR_COORDINATOR;
+    frame.link_src = 0x11;
+    frame.link_dst = 0x22;
+    frame.cmd = UMESH_CMD_PING;
+    frame.flags = UMESH_FLAG_PRIO_NORMAL;
+    frame.seq_num = 0x2222;
+    frame.hop_count = UMESH_MAX_HOP_COUNT;
+
+    net_on_frame(&frame, -60);
+    TEST_ASSERT(s_forward_count == 1, "gradient: forwards through lower-distance neighbor");
+    TEST_ASSERT(frame_deserialize(s_forward_buf, s_forward_len, &forwarded) == UMESH_OK,
+                "gradient: forwarded frame parses");
+    TEST_ASSERT(forwarded.dst == UMESH_ADDR_COORDINATOR,
+                "gradient: final destination preserved");
+    TEST_ASSERT(forwarded.link_dst == 0x21,
+                "gradient: next hop uses lower-distance neighbor");
+}
+
+static void test_gradient_rejects_without_lower_neighbor(void)
+{
+    umesh_frame_t frame;
+
+    init_forward_stack(0x22);
+    neighbor_init();
+    neighbor_update(0x21, 2, -55, 100);
+    neighbor_update(0x23, 1, -65, 100);
+    discovery_gradient_set_distance(1);
+
+    memset(&frame, 0, sizeof(frame));
+    frame.net_id = 0x01;
+    frame.src = 0x11;
+    frame.dst = UMESH_ADDR_COORDINATOR;
+    frame.link_src = 0x11;
+    frame.link_dst = 0x22;
+    frame.cmd = UMESH_CMD_PING;
+    frame.flags = UMESH_FLAG_PRIO_NORMAL;
+    frame.seq_num = 0x2223;
+    frame.hop_count = UMESH_MAX_HOP_COUNT;
+
+    net_on_frame(&frame, -60);
+    TEST_ASSERT(s_forward_count == 0, "gradient: rejects without lower-distance neighbor");
+    TEST_ASSERT(umesh_current_ctx()->net.last_route_result == UMESH_ERR_NOT_ROUTABLE,
+                "gradient: no lower neighbor records not-routable error");
+}
+
 int main(void)
 {
     printf("=== test_gradient ===\n");
@@ -166,6 +259,8 @@ int main(void)
     test_gradient_beacon_storm_prevention();
     test_gradient_neighbor_expiry();
     test_gradient_fallback_to_dv();
+    test_gradient_forwards_through_lower_neighbor();
+    test_gradient_rejects_without_lower_neighbor();
     printf("Result: %d passed, %d failed\n", s_pass, s_fail);
     return (s_fail == 0) ? 0 : 1;
 }

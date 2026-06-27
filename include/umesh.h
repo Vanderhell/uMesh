@@ -68,6 +68,8 @@ typedef enum {
 #define UMESH_MAX_HOP_COUNT    15
 #define UMESH_SEQ_WINDOW       32
 #define UMESH_MAX_FRAME_SIZE   256
+#define UMESH_DUP_CACHE_SIZE    8
+#define UMESH_DUP_CACHE_TTL_MS  UMESH_NODE_TIMEOUT_MS
 
 #define UMESH_SLOT_TIME_MS      1
 #define UMESH_CCA_TIME_MS       2
@@ -195,6 +197,16 @@ typedef struct {
     uint32_t last_seen_ms;
     bool     valid;
 } umesh_route_entry_t;
+
+typedef struct {
+    uint8_t  src;
+    uint8_t  dst;
+    uint8_t  cmd;
+    uint8_t  flags;
+    uint16_t seq_num;
+    uint32_t last_seen_ms;
+    bool     valid;
+} umesh_dup_entry_t;
 
 typedef struct {
     uint32_t tx_count;
@@ -327,6 +339,9 @@ typedef struct umesh_ctx_t {
         uint32_t gradient_jitter_max_ms;
         uint32_t last_gradient_beacon_ms;
         uint32_t last_election_result_ms;
+        umesh_result_t last_route_result;
+        umesh_dup_entry_t dup_cache[UMESH_DUP_CACHE_SIZE];
+        uint8_t dup_cache_next;
 #if UMESH_ENABLE_POWER_MANAGEMENT
         umesh_power_mode_t power_mode;
         uint32_t light_sleep_interval_ms;

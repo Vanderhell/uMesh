@@ -69,6 +69,30 @@ if(UMESH_USE_MICROCRYPT)
 endif()
 add_test(NAME test_mac COMMAND test_mac)
 
+# ── test_forwarding ────────────────────────────────────────
+add_executable(test_forwarding
+    test_forwarding.c
+    ../src/context.c
+    ../src/net/net.c
+    ../src/net/routing.c
+    ../src/net/discovery.c
+    ../src/mac/mac.c
+    ../src/mac/cca.c
+    ../src/mac/frame.c
+    ../src/common/crc.c
+    ../src/common/ring.c
+    ../src/phy/phy.c
+    ../src/sec/sec.c
+    ../src/sec/keys.c
+    ../port/posix/phy_posix.c
+)
+target_include_directories(test_forwarding PRIVATE ../src ../include ../port/posix)
+if(UMESH_USE_MICROCRYPT)
+    target_compile_definitions(test_forwarding PRIVATE UMESH_USE_MICROCRYPT=1)
+    target_link_libraries(test_forwarding PRIVATE microcrypt)
+endif()
+add_test(NAME test_forwarding COMMAND test_forwarding)
+
 # ── test_routing ─────────────────────────────────────────
 add_executable(test_routing
     test_routing.c

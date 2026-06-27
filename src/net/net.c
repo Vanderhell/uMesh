@@ -20,29 +20,148 @@ static uint16_t next_seq(umesh_ctx_t *ctx)
     return ctx->net.seq_num;
 }
 
-static umesh_result_t net_route_distance_vector(umesh_ctx_t *ctx,
-                                                 umesh_frame_t *frame)
+static void net_dup_cache_reset(umesh_ctx_t *ctx)
 {
-    umesh_route_entry_t route;
-    uint8_t next_hop;
+    uint8_t i;
 
-    if (frame->dst == UMESH_ADDR_BROADCAST) {
-        frame->link_src = ctx->net.node_id;
-        frame->link_dst = UMESH_ADDR_BROADCAST;
-        return mac_send(frame);
+    for (i = 0; i < UMESH_DUP_CACHE_SIZE; i++) {
+        ctx->net.dup_cache[i].valid = false;
     }
+    ctx->net.dup_cache_next = 0;
+    ctx->net.last_route_result = UMESH_OK;
+}
 
-    if (!routing_find(frame->dst, &route)) {
-        if (!routing_find(UMESH_ADDR_COORDINATOR, &route)) {
-            return UMESH_ERR_NOT_ROUTABLE;
+static bool net_dup_cache_match(const umesh_dup_entry_t *entry,
+                                const umesh_frame_t *frame)
+{
+    return entry->valid &&
+           entry->src == frame->src &&
+           entry->dst == frame->dst &&
+           entry->cmd == frame->cmd &&
+           entry->flags == frame->flags &&
+           entry->seq_num == frame->seq_num;
+}
+
+static bool net_dup_cache_seen(umesh_ctx_t *ctx, const umesh_frame_t *frame)
+{
+    uint8_t i;
+    uint8_t insert = ctx->net.dup_cache_next;
+    uint32_t now_ms = ctx->net.now_ms;
+
+    for (i = 0; i < UMESH_DUP_CACHE_SIZE; i++) {
+        umesh_dup_entry_t *entry = &ctx->net.dup_cache[i];
+        if (!entry->valid) {
+            continue;
+        }
+        if (now_ms >= entry->last_seen_ms &&
+            now_ms - entry->last_seen_ms > UMESH_DUP_CACHE_TTL_MS) {
+            entry->valid = false;
+            continue;
+        }
+        if (net_dup_cache_match(entry, frame)) {
+            entry->last_seen_ms = now_ms;
+            return true;
         }
     }
 
-    next_hop = route.next_hop;
+    for (i = 0; i < UMESH_DUP_CACHE_SIZE; i++) {
+        if (!ctx->net.dup_cache[i].valid) {
+            insert = i;
+            break;
+        }
+    }
+
+    ctx->net.dup_cache[insert].src = frame->src;
+    ctx->net.dup_cache[insert].dst = frame->dst;
+    ctx->net.dup_cache[insert].cmd = frame->cmd;
+    ctx->net.dup_cache[insert].flags = frame->flags;
+    ctx->net.dup_cache[insert].seq_num = frame->seq_num;
+    ctx->net.dup_cache[insert].last_seen_ms = now_ms;
+    ctx->net.dup_cache[insert].valid = true;
+    ctx->net.dup_cache_next = (uint8_t)((insert + 1u) % UMESH_DUP_CACHE_SIZE);
+    return false;
+}
+
+static umesh_result_t net_select_next_hop(umesh_ctx_t *ctx,
+                                          const umesh_frame_t *frame,
+                                          uint8_t *next_hop_out)
+{
+    umesh_route_entry_t route;
+
+    if (!ctx || !frame || !next_hop_out) {
+        return UMESH_ERR_NULL_PTR;
+    }
+    if (frame->dst == UMESH_ADDR_BROADCAST) {
+        *next_hop_out = UMESH_ADDR_BROADCAST;
+        return UMESH_OK;
+    }
+
+    routing_expire(ctx->net.now_ms);
+
+    if (ctx->net.routing_mode == UMESH_ROUTING_GRADIENT &&
+        frame->dst == UMESH_ADDR_COORDINATOR) {
+        uint8_t my_distance = discovery_gradient_distance();
+        uint8_t next_hop = neighbor_find_uphill(my_distance);
+
+        if (next_hop == UMESH_ADDR_BROADCAST) {
+            return UMESH_ERR_NOT_ROUTABLE;
+        }
+        *next_hop_out = next_hop;
+        return UMESH_OK;
+    }
+
+    if (!routing_find(frame->dst, &route)) {
+        return UMESH_ERR_NOT_ROUTABLE;
+    }
+    if (route.next_hop == UMESH_ADDR_BROADCAST) {
+        return UMESH_ERR_NOT_ROUTABLE;
+    }
+
+    *next_hop_out = route.next_hop;
+    return UMESH_OK;
+}
+
+static umesh_result_t net_send_via_route(umesh_ctx_t *ctx, umesh_frame_t *frame)
+{
+    uint8_t next_hop = UMESH_ADDR_BROADCAST;
+    umesh_result_t r;
+
+    r = net_select_next_hop(ctx, frame, &next_hop);
+    if (r != UMESH_OK) {
+        ctx->net.last_route_result = r;
+        return r;
+    }
+
     frame->link_src = ctx->net.node_id;
     frame->link_dst = next_hop;
+    r = mac_send(frame);
+    ctx->net.last_route_result = r;
+    return r;
+}
 
-    return mac_send(frame);
+static umesh_result_t net_forward_frame(umesh_ctx_t *ctx, umesh_frame_t *frame)
+{
+    umesh_result_t r;
+
+    if (!frame) {
+        return UMESH_ERR_NULL_PTR;
+    }
+    if (frame->hop_count == 0) {
+        ctx->net.last_route_result = UMESH_ERR_TOO_LONG;
+        return UMESH_ERR_TOO_LONG;
+    }
+
+    frame->hop_count--;
+    if (frame->hop_count == 0) {
+        ctx->net.last_route_result = UMESH_ERR_TOO_LONG;
+        return UMESH_ERR_TOO_LONG;
+    }
+
+    r = net_send_via_route(ctx, frame);
+    if (r != UMESH_OK) {
+        ctx->net.last_route_result = r;
+    }
+    return r;
 }
 
 static void enter_scanning(umesh_ctx_t *ctx)
@@ -84,6 +203,32 @@ static void on_mac_rx(umesh_frame_t *frame, int8_t rssi)
         }
     }
 
+    if (frame->link_dst != ctx->net.node_id &&
+        frame->link_dst != UMESH_ADDR_BROADCAST) {
+        return;
+    }
+
+    if (frame->flags & UMESH_FLAG_IS_ACK) {
+        if (ctx->net.rx_cb) {
+            ctx->net.rx_cb(frame, rssi);
+        }
+        return;
+    }
+
+    if (net_dup_cache_seen(ctx, frame)) {
+        return;
+    }
+
+    if (frame->link_dst == ctx->net.node_id &&
+        frame->dst != ctx->net.node_id &&
+        frame->dst != UMESH_ADDR_BROADCAST) {
+        cca_set_rx_in_progress(false);
+        if (net_forward_frame(ctx, frame) != UMESH_OK) {
+            ctx->mac.stats.drop_count++;
+        }
+        return;
+    }
+
     if (ctx->net.rx_cb) {
         ctx->net.rx_cb(frame, rssi);
     }
@@ -110,6 +255,7 @@ umesh_result_t net_init(uint8_t net_id, uint8_t node_id, umesh_role_t role)
     ctx->net.gradient_jitter_max_ms = UMESH_GRADIENT_JITTER_MAX_MS;
     ctx->net.last_gradient_beacon_ms = 0;
     ctx->net.last_election_result_ms = 0;
+    net_dup_cache_reset(ctx);
 #if UMESH_ENABLE_POWER_MANAGEMENT
     ctx->net.power_mode = UMESH_POWER_ACTIVE;
     ctx->net.light_sleep_interval_ms = UMESH_LIGHT_SLEEP_INTERVAL_MS;
@@ -274,6 +420,7 @@ void net_leave(void)
     umesh_ctx_t *ctx = umesh_current_ctx();
     discovery_leave();
     discovery_gradient_reset();
+    net_dup_cache_reset(ctx);
     ctx->net.state = UMESH_STATE_DISCONNECTED;
     ctx->net.node_id = UMESH_ADDR_UNASSIGNED;
 }
@@ -294,25 +441,24 @@ umesh_result_t net_route(umesh_frame_t *frame)
         frame->link_dst = frame->dst;
     }
 
+    if (frame->dst == UMESH_ADDR_BROADCAST) {
+        frame->link_dst = UMESH_ADDR_BROADCAST;
+        return mac_send(frame);
+    }
+
     if (ctx->net.routing_mode == UMESH_ROUTING_GRADIENT &&
         frame->dst == UMESH_ADDR_COORDINATOR) {
         uint8_t my_distance = discovery_gradient_distance();
-        uint8_t next_hop;
+        uint8_t next_hop = neighbor_find_uphill(my_distance);
 
-        if (ctx->net.node_id == UMESH_ADDR_COORDINATOR) {
-            return UMESH_OK;
-        }
-
-        next_hop = neighbor_find_uphill(my_distance);
         if (next_hop == UMESH_ADDR_BROADCAST) {
             return UMESH_ERR_NOT_ROUTABLE;
         }
         frame->link_dst = next_hop;
-    } else {
-        return net_route_distance_vector(ctx, frame);
+        return mac_send(frame);
     }
 
-    return mac_send(frame);
+    return net_send_via_route(ctx, frame);
 }
 
 uint8_t net_get_node_id(void)
