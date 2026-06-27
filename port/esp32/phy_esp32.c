@@ -169,4 +169,9 @@ void phy_hal_deinit(void)
     s_rx_cb = NULL;
 }
 
+void phy_hal_delay_ms(uint32_t duration_ms)
+{
+    vTaskDelay(pdMS_TO_TICKS(duration_ms));
+}
+
 #endif /* UMESH_PORT_ESP32 */

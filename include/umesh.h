@@ -369,9 +369,13 @@ typedef struct umesh_ctx_t {
         void (*rx_cb)(umesh_frame_t *frame, int8_t rssi);
         mac_stats_t stats;
         uint8_t node_id;
+        uint32_t prng_state;
         bool waiting_ack;
         uint8_t ack_src;
+        uint8_t ack_dst;
+        uint8_t ack_cmd;
         uint16_t ack_seq;
+        uint32_t ack_epoch;
         bool ack_received;
         int8_t last_rssi;
         bool rx_in_progress;
