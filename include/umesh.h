@@ -209,6 +209,24 @@ typedef struct {
 } umesh_dup_entry_t;
 
 typedef struct {
+    uint8_t  requester_mac[6];
+    uint32_t token;
+    uint8_t  assigned_id;
+    uint32_t coordinator_term;
+    uint32_t security_epoch;
+    uint8_t  coordinator_mac[6];
+    uint32_t last_seen_ms;
+    bool     valid;
+} umesh_join_tx_t;
+
+typedef struct {
+    uint8_t  node_id;
+    uint8_t  node_mac[6];
+    uint32_t last_seen_ms;
+    bool     valid;
+} umesh_active_node_t;
+
+typedef struct {
     uint32_t tx_count;
     uint32_t rx_count;
     uint32_t ack_count;
@@ -357,6 +375,12 @@ typedef struct umesh_ctx_t {
         umesh_role_t role;
         uint16_t seq_num;
         uint8_t assigned_id;
+        uint32_t join_token;
+        uint32_t election_term;
+        uint32_t seen_election_term;
+        umesh_result_t last_join_result;
+        umesh_join_tx_t join_cache[UMESH_MAX_NODES];
+        umesh_active_node_t active_nodes[UMESH_MAX_NODES];
         bool joined;
         uint8_t next_assign_id;
         uint32_t scan_ms;

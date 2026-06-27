@@ -6,6 +6,155 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define JOIN_REQ_PAYLOAD_SIZE  15u
+#define JOIN_ACK_PAYLOAD_SIZE  26u
+#define ELECTION_PAYLOAD_SIZE  10u
+
+static bool mac_is_zero(const uint8_t mac[6])
+{
+    static const uint8_t zero[6] = {0};
+    return memcmp(mac, zero, 6) == 0;
+}
+
+static bool mac_is_valid_identity(const uint8_t mac[6])
+{
+    if (!mac) return false;
+    if (mac_is_zero(mac)) return false;
+    if (mac[0] == 0xFF && mac[1] == 0xFF && mac[2] == 0xFF &&
+        mac[3] == 0xFF && mac[4] == 0xFF && mac[5] == 0xFF) {
+        return false;
+    }
+    return true;
+}
+
+static void write_u32le(uint8_t out[4], uint32_t value)
+{
+    out[0] = (uint8_t)(value & 0xFF);
+    out[1] = (uint8_t)((value >> 8) & 0xFF);
+    out[2] = (uint8_t)((value >> 16) & 0xFF);
+    out[3] = (uint8_t)((value >> 24) & 0xFF);
+}
+
+static uint32_t read_u32le(const uint8_t in[4])
+{
+    return (uint32_t)in[0] |
+           ((uint32_t)in[1] << 8) |
+           ((uint32_t)in[2] << 16) |
+           ((uint32_t)in[3] << 24);
+}
+
+static umesh_join_tx_t *join_cache_find(umesh_ctx_t *ctx,
+                                        const uint8_t requester_mac[6],
+                                        uint32_t token)
+{
+    uint8_t i;
+    for (i = 0; i < UMESH_MAX_NODES; i++) {
+        umesh_join_tx_t *entry = &ctx->discovery.join_cache[i];
+        if (!entry->valid) continue;
+        if (entry->token != token) continue;
+        if (memcmp(entry->requester_mac, requester_mac, 6) == 0) {
+            return entry;
+        }
+    }
+    return NULL;
+}
+
+static umesh_join_tx_t *join_cache_alloc(umesh_ctx_t *ctx)
+{
+    uint8_t i;
+    for (i = 0; i < UMESH_MAX_NODES; i++) {
+        if (!ctx->discovery.join_cache[i].valid) {
+            return &ctx->discovery.join_cache[i];
+        }
+    }
+    return NULL;
+}
+
+static umesh_active_node_t *active_node_find(umesh_ctx_t *ctx, uint8_t node_id)
+{
+    uint8_t i;
+    for (i = 0; i < UMESH_MAX_NODES; i++) {
+        if (ctx->discovery.active_nodes[i].valid &&
+            ctx->discovery.active_nodes[i].node_id == node_id) {
+            return &ctx->discovery.active_nodes[i];
+        }
+    }
+    return NULL;
+}
+
+static bool active_node_in_use(umesh_ctx_t *ctx, uint8_t node_id)
+{
+    return active_node_find(ctx, node_id) != NULL;
+}
+
+static umesh_result_t active_node_add(umesh_ctx_t *ctx, uint8_t node_id,
+                                      const uint8_t node_mac[6],
+                                      uint32_t now_ms)
+{
+    uint8_t i;
+    umesh_active_node_t *slot = NULL;
+
+    if (node_id == UMESH_ADDR_BROADCAST ||
+        node_id == UMESH_ADDR_UNASSIGNED ||
+        node_id == UMESH_ADDR_COORDINATOR) {
+        return UMESH_ERR_INVALID_DST;
+    }
+    if (!mac_is_valid_identity(node_mac)) {
+        return UMESH_ERR_INVALID_DST;
+    }
+
+    if (active_node_find(ctx, node_id)) {
+        return UMESH_ERR_INVALID_DST;
+    }
+
+    for (i = 0; i < UMESH_MAX_NODES; i++) {
+        if (!ctx->discovery.active_nodes[i].valid) {
+            slot = &ctx->discovery.active_nodes[i];
+            break;
+        }
+    }
+    if (!slot) {
+        return UMESH_ERR_NOT_ROUTABLE;
+    }
+
+    slot->valid = true;
+    slot->node_id = node_id;
+    memcpy(slot->node_mac, node_mac, 6);
+    slot->last_seen_ms = now_ms;
+    return UMESH_OK;
+}
+
+static void active_node_remove(umesh_ctx_t *ctx, uint8_t node_id)
+{
+    umesh_active_node_t *entry = active_node_find(ctx, node_id);
+    if (entry) {
+        entry->valid = false;
+    }
+}
+
+static umesh_result_t allocate_node_id(umesh_ctx_t *ctx, uint8_t *node_id_out)
+{
+    uint8_t start;
+    uint8_t pass;
+    uint8_t candidate;
+
+    if (!ctx || !node_id_out) return UMESH_ERR_NULL_PTR;
+    start = (ctx->discovery.next_assign_id < 0x02u) ? 0x02u : ctx->discovery.next_assign_id;
+    for (pass = 0; pass < 2; pass++) {
+        for (candidate = (pass == 0) ? start : 0x02u; candidate <= 0xFDu; candidate++) {
+            if (!active_node_in_use(ctx, candidate)) {
+                *node_id_out = candidate;
+                ctx->discovery.next_assign_id = (uint8_t)(candidate + 1u);
+                if (ctx->discovery.next_assign_id > 0xFDu) {
+                    ctx->discovery.next_assign_id = 0x02u;
+                }
+                return UMESH_OK;
+            }
+        }
+    }
+    return UMESH_ERR_NOT_ROUTABLE;
+}
+
 static uint16_t next_seq(umesh_ctx_t *ctx)
 {
     ctx->discovery.seq_num = (uint16_t)((ctx->discovery.seq_num + 1u) & 0x0FFF);
@@ -80,16 +229,25 @@ umesh_result_t discovery_init(uint8_t net_id, uint8_t node_id,
                               umesh_role_t role)
 {
     umesh_ctx_t *ctx = umesh_current_ctx();
+    uint8_t i;
     ctx->discovery.net_id = net_id;
     ctx->discovery.node_id = node_id;
     ctx->discovery.role = role;
     ctx->discovery.assigned_id = node_id;
+    ctx->discovery.join_token = 0;
+    ctx->discovery.election_term = 0;
+    ctx->discovery.seen_election_term = 0;
+    ctx->discovery.last_join_result = UMESH_OK;
     ctx->discovery.joined = (node_id != UMESH_ADDR_UNASSIGNED) &&
                (node_id != UMESH_ADDR_COORDINATOR || role == UMESH_ROLE_COORDINATOR);
     ctx->discovery.next_assign_id = 0x02;
     ctx->discovery.scan_ms = UMESH_DISCOVER_TIMEOUT_MS;
     ctx->discovery.election_ms = UMESH_ELECTION_TIMEOUT_MS;
     ctx->discovery.seq_num = 0;
+    for (i = 0; i < UMESH_MAX_NODES; i++) {
+        ctx->discovery.join_cache[i].valid = false;
+        ctx->discovery.active_nodes[i].valid = false;
+    }
 
     if (role == UMESH_ROLE_COORDINATOR) {
         ctx->discovery.node_id = UMESH_ADDR_COORDINATOR;
@@ -177,6 +335,7 @@ void discovery_set_role(umesh_role_t role)
         ctx->discovery.assigned_id = UMESH_ADDR_COORDINATOR;
         ctx->discovery.joined = true;
         ctx->discovery.next_assign_id = 0x02;
+        ctx->discovery.election_term = 0;
     } else if (role == UMESH_ROLE_ROUTER) {
         if (ctx->discovery.node_id == UMESH_ADDR_COORDINATOR) {
             ctx->discovery.node_id = UMESH_ADDR_UNASSIGNED;
@@ -197,6 +356,9 @@ void discovery_set_node_id(uint8_t node_id)
     ctx->discovery.node_id = node_id;
     ctx->discovery.assigned_id = node_id;
     ctx->discovery.joined = (node_id != UMESH_ADDR_UNASSIGNED);
+    if (node_id != UMESH_ADDR_UNASSIGNED && node_id != UMESH_ADDR_COORDINATOR) {
+        ctx->discovery.last_join_result = UMESH_OK;
+    }
 }
 
 umesh_result_t discovery_join(void)
@@ -206,7 +368,24 @@ umesh_result_t discovery_join(void)
         ctx->discovery.joined = true;
         return UMESH_OK;
     }
-    return send_frame(UMESH_ADDR_BROADCAST, UMESH_CMD_JOIN, NULL, 0, UMESH_FLAG_PRIO_HIGH);
+
+    if (!mac_is_valid_identity(ctx->discovery.local_mac)) {
+        return UMESH_ERR_NOT_INIT;
+    }
+    if (ctx->discovery.join_token == 0) {
+        ctx->discovery.join_token = next_seq(ctx);
+    }
+    {
+        uint8_t payload[JOIN_REQ_PAYLOAD_SIZE];
+
+        memcpy(&payload[0], ctx->discovery.local_mac, 6);
+        write_u32le(&payload[6], ctx->discovery.join_token);
+        write_u32le(&payload[10], ctx->cfg.security_epoch);
+        payload[14] = (uint8_t)ctx->cfg.security;
+        ctx->discovery.last_join_result = UMESH_OK;
+        return send_frame(UMESH_ADDR_BROADCAST, UMESH_CMD_JOIN,
+                          payload, (uint8_t)sizeof(payload), UMESH_FLAG_PRIO_HIGH);
+    }
 }
 
 umesh_result_t discovery_start_election(void)
@@ -214,20 +393,33 @@ umesh_result_t discovery_start_election(void)
     umesh_ctx_t *ctx = umesh_current_ctx();
     ctx->discovery.auto_saw_lower_mac = false;
     ctx->discovery.auto_seen_result = false;
+    ctx->discovery.election_term = (uint32_t)(ctx->discovery.election_term + 1u);
+    ctx->discovery.seen_election_term = ctx->discovery.election_term;
     memset(ctx->discovery.auto_winner_mac, 0, sizeof(ctx->discovery.auto_winner_mac));
-    return send_frame(UMESH_ADDR_BROADCAST, UMESH_CMD_ELECTION,
-                      ctx->discovery.local_mac, 6, UMESH_FLAG_PRIO_HIGH);
+    {
+        uint8_t payload[ELECTION_PAYLOAD_SIZE];
+
+        write_u32le(&payload[0], ctx->discovery.election_term);
+        memcpy(&payload[4], ctx->discovery.local_mac, 6);
+        return send_frame(UMESH_ADDR_BROADCAST, UMESH_CMD_ELECTION,
+                          payload, (uint8_t)sizeof(payload), UMESH_FLAG_PRIO_HIGH);
+    }
 }
 
 umesh_result_t discovery_broadcast_election_result(void)
 {
     umesh_ctx_t *ctx = umesh_current_ctx();
-    static const uint8_t zero_mac[6] = {0};
-    if (memcmp(ctx->discovery.auto_winner_mac, zero_mac, 6) == 0) {
+    if (mac_is_zero(ctx->discovery.auto_winner_mac)) {
         memcpy(ctx->discovery.auto_winner_mac, ctx->discovery.local_mac, 6);
     }
-    return send_frame(UMESH_ADDR_BROADCAST, UMESH_CMD_ELECTION_RESULT,
-                      ctx->discovery.auto_winner_mac, 6, UMESH_FLAG_PRIO_HIGH);
+    {
+        uint8_t payload[ELECTION_PAYLOAD_SIZE];
+
+        write_u32le(&payload[0], ctx->discovery.election_term);
+        memcpy(&payload[4], ctx->discovery.auto_winner_mac, 6);
+        return send_frame(UMESH_ADDR_BROADCAST, UMESH_CMD_ELECTION_RESULT,
+                          payload, (uint8_t)sizeof(payload), UMESH_FLAG_PRIO_HIGH);
+    }
 }
 
 void discovery_leave(void)
@@ -236,6 +428,7 @@ void discovery_leave(void)
     send_frame(UMESH_ADDR_BROADCAST, UMESH_CMD_LEAVE, NULL, 0, UMESH_FLAG_PRIO_HIGH);
     ctx->discovery.joined = false;
     ctx->discovery.node_id = UMESH_ADDR_UNASSIGNED;
+    ctx->discovery.join_token = 0;
 }
 
 bool discovery_is_joined(void)
@@ -276,6 +469,27 @@ bool discovery_auto_seen_election_result(void)
     return umesh_current_ctx()->discovery.auto_seen_result;
 }
 
+void discovery_tick(uint32_t now_ms)
+{
+    umesh_ctx_t *ctx = umesh_current_ctx();
+    uint8_t i;
+
+    ctx->discovery.now_ms = now_ms;
+    for (i = 0; i < UMESH_MAX_NODES; i++) {
+        umesh_active_node_t *entry = &ctx->discovery.active_nodes[i];
+        if (!entry->valid) continue;
+        if (now_ms >= entry->last_seen_ms &&
+            now_ms - entry->last_seen_ms > UMESH_NODE_TIMEOUT_MS) {
+            uint8_t node_id = entry->node_id;
+            entry->valid = false;
+            routing_remove(node_id);
+            if (ctx->cfg.on_node_left) {
+                ctx->cfg.on_node_left(node_id);
+            }
+        }
+    }
+}
+
 void discovery_auto_promote_to_coordinator(void)
 {
     umesh_ctx_t *ctx = umesh_current_ctx();
@@ -284,8 +498,24 @@ void discovery_auto_promote_to_coordinator(void)
     ctx->discovery.assigned_id = UMESH_ADDR_COORDINATOR;
     ctx->discovery.joined = true;
     ctx->discovery.next_assign_id = 0x02;
+    ctx->discovery.seen_election_term = ctx->discovery.election_term;
     memcpy(ctx->discovery.auto_winner_mac, ctx->discovery.local_mac, 6);
     discovery_broadcast_election_result();
+}
+
+uint32_t discovery_get_join_token(void)
+{
+    return umesh_current_ctx()->discovery.join_token;
+}
+
+uint32_t discovery_get_election_term(void)
+{
+    return umesh_current_ctx()->discovery.election_term;
+}
+
+umesh_result_t discovery_get_last_join_result(void)
+{
+    return umesh_current_ctx()->discovery.last_join_result;
 }
 
 void discovery_gradient_reset(void)
@@ -344,14 +574,72 @@ void discovery_on_frame(const umesh_frame_t *frame, int8_t rssi)
     switch (frame->cmd) {
     case UMESH_CMD_JOIN:
         if (ctx->discovery.role != UMESH_ROLE_COORDINATOR) break;
-        if (frame->src != UMESH_ADDR_UNASSIGNED) break;
+        if (frame->payload_len < JOIN_REQ_PAYLOAD_SIZE) break;
         {
-            uint8_t new_id = ctx->discovery.next_assign_id++;
-            if (ctx->discovery.next_assign_id > 0xFD) ctx->discovery.next_assign_id = 0x02;
+            uint8_t requester_mac[6];
+            uint32_t token;
+            uint32_t req_epoch;
+            uint8_t req_security;
+            umesh_join_tx_t *join_tx;
+            uint8_t new_id = 0;
+            umesh_result_t ar;
+            uint8_t payload[JOIN_ACK_PAYLOAD_SIZE];
 
+            memcpy(requester_mac, &frame->payload[0], 6);
+            token = read_u32le(&frame->payload[6]);
+            req_epoch = read_u32le(&frame->payload[10]);
+            req_security = frame->payload[14];
+
+            if (!mac_is_valid_identity(requester_mac) || token == 0) break;
+            if (req_epoch != ctx->cfg.security_epoch) break;
+            if (req_security != (uint8_t)ctx->cfg.security) break;
+
+            join_tx = join_cache_find(ctx, requester_mac, token);
+            if (join_tx) {
+                new_id = join_tx->assigned_id;
+                join_tx->last_seen_ms = ctx->discovery.now_ms;
+            } else {
+                ar = allocate_node_id(ctx, &new_id);
+                if (ar != UMESH_OK) {
+                    ctx->discovery.last_join_result = ar;
+                    break;
+                }
+                join_tx = join_cache_alloc(ctx);
+                if (!join_tx) {
+                    ctx->discovery.last_join_result = UMESH_ERR_NOT_ROUTABLE;
+                    break;
+                }
+                memcpy(join_tx->requester_mac, requester_mac, 6);
+                join_tx->token = token;
+                join_tx->assigned_id = new_id;
+                join_tx->coordinator_term = ctx->discovery.election_term;
+                join_tx->security_epoch = ctx->cfg.security_epoch;
+                memcpy(join_tx->coordinator_mac, ctx->discovery.local_mac, 6);
+                join_tx->last_seen_ms = ctx->discovery.now_ms;
+                join_tx->valid = true;
+
+                ar = active_node_add(ctx, new_id, requester_mac, ctx->discovery.now_ms);
+                if (ar != UMESH_OK) {
+                    join_tx->valid = false;
+                    ctx->discovery.last_join_result = ar;
+                    break;
+                }
+                routing_add(new_id, new_id, 1, rssi, ctx->discovery.now_ms);
+                if (ctx->cfg.on_node_joined) {
+                    ctx->cfg.on_node_joined(new_id);
+                }
+            }
+
+            memcpy(&payload[0], requester_mac, 6);
+            write_u32le(&payload[6], token);
+            payload[10] = new_id;
+            memcpy(&payload[11], ctx->discovery.local_mac, 6);
+            write_u32le(&payload[17], ctx->discovery.election_term);
+            write_u32le(&payload[21], ctx->cfg.security_epoch);
+            payload[25] = (uint8_t)ctx->cfg.security;
+            ctx->discovery.last_join_result = UMESH_OK;
             send_frame(UMESH_ADDR_BROADCAST, UMESH_CMD_ASSIGN,
-                       &new_id, 1, UMESH_FLAG_PRIO_HIGH);
-            routing_add(new_id, new_id, 1, rssi, ctx->discovery.now_ms);
+                       payload, (uint8_t)sizeof(payload), UMESH_FLAG_PRIO_HIGH);
             send_frame(UMESH_ADDR_BROADCAST, UMESH_CMD_NODE_JOINED,
                        &new_id, 1, UMESH_FLAG_PRIO_NORMAL);
         }
@@ -360,12 +648,42 @@ void discovery_on_frame(const umesh_frame_t *frame, int8_t rssi)
     case UMESH_CMD_ASSIGN:
         if (ctx->discovery.role == UMESH_ROLE_COORDINATOR) break;
         if (ctx->discovery.joined) break;
-        if (frame->payload_len < 1) break;
+        if (frame->payload_len < JOIN_ACK_PAYLOAD_SIZE) break;
         {
-            uint8_t new_id = frame->payload[0];
+            uint8_t requester_mac[6];
+            uint32_t token;
+            uint8_t new_id;
+            uint8_t coordinator_mac[6];
+            uint32_t coordinator_term;
+            uint32_t sec_epoch;
+            uint8_t sec_level;
+
+            memcpy(requester_mac, &frame->payload[0], 6);
+            token = read_u32le(&frame->payload[6]);
+            new_id = frame->payload[10];
+            memcpy(coordinator_mac, &frame->payload[11], 6);
+            coordinator_term = read_u32le(&frame->payload[17]);
+            sec_epoch = read_u32le(&frame->payload[21]);
+            sec_level = frame->payload[25];
+
+            if (!mac_is_valid_identity(requester_mac) ||
+                memcmp(requester_mac, ctx->discovery.local_mac, 6) != 0) break;
+            if (token == 0 || token != ctx->discovery.join_token) break;
+            if (sec_epoch != ctx->cfg.security_epoch) break;
+            if (sec_level != (uint8_t)ctx->cfg.security) break;
+            if (!mac_is_valid_identity(coordinator_mac)) break;
+            if (new_id == UMESH_ADDR_BROADCAST ||
+                new_id == UMESH_ADDR_UNASSIGNED ||
+                new_id == UMESH_ADDR_COORDINATOR) break;
+            if (active_node_in_use(ctx, new_id)) break;
+            if (coordinator_term < ctx->discovery.seen_election_term) break;
+
             ctx->discovery.node_id = new_id;
             ctx->discovery.assigned_id = new_id;
             ctx->discovery.joined = true;
+            ctx->discovery.join_token = 0;
+            ctx->discovery.last_join_result = UMESH_OK;
+            memcpy(ctx->discovery.local_mac, requester_mac, 6);
             routing_add(UMESH_ADDR_COORDINATOR,
                         UMESH_ADDR_COORDINATOR, 1, rssi, ctx->discovery.now_ms);
         }
@@ -375,6 +693,10 @@ void discovery_on_frame(const umesh_frame_t *frame, int8_t rssi)
         if (ctx->discovery.role == UMESH_ROLE_COORDINATOR) {
             uint8_t left_id = frame->src;
             routing_remove(left_id);
+            active_node_remove(ctx, left_id);
+            if (ctx->cfg.on_node_left) {
+                ctx->cfg.on_node_left(left_id);
+            }
             send_frame(UMESH_ADDR_BROADCAST, UMESH_CMD_NODE_LEFT,
                        &left_id, 1, UMESH_FLAG_PRIO_NORMAL);
         }
@@ -443,19 +765,40 @@ void discovery_on_frame(const umesh_frame_t *frame, int8_t rssi)
         break;
 
     case UMESH_CMD_ELECTION:
-        if (frame->payload_len < 6) break;
-        if (mac_compare(frame->payload, ctx->discovery.local_mac) < 0) {
-            ctx->discovery.auto_saw_lower_mac = true;
-            memcpy(ctx->discovery.auto_winner_mac, frame->payload, 6);
+        if (frame->payload_len < ELECTION_PAYLOAD_SIZE) break;
+        {
+            uint32_t term = read_u32le(&frame->payload[0]);
+            const uint8_t *candidate = &frame->payload[4];
+
+            if (!mac_is_valid_identity(candidate)) break;
+            if (term < ctx->discovery.seen_election_term) break;
+            if (term > ctx->discovery.seen_election_term) {
+                ctx->discovery.seen_election_term = term;
+                ctx->discovery.auto_seen_result = false;
+            }
+            if (mac_compare(candidate, ctx->discovery.local_mac) < 0) {
+                ctx->discovery.auto_saw_lower_mac = true;
+                memcpy(ctx->discovery.auto_winner_mac, candidate, 6);
+            }
         }
         break;
 
     case UMESH_CMD_ELECTION_RESULT:
-        if (frame->payload_len < 6) break;
-        ctx->discovery.auto_seen_result = true;
-        memcpy(ctx->discovery.auto_winner_mac, frame->payload, 6);
+        if (frame->payload_len < ELECTION_PAYLOAD_SIZE) break;
         {
-            int cmp = mac_compare(ctx->discovery.auto_winner_mac, ctx->discovery.local_mac);
+            uint32_t term = read_u32le(&frame->payload[0]);
+            const uint8_t *winner = &frame->payload[4];
+            int cmp;
+
+            if (!mac_is_valid_identity(winner)) break;
+            if (term < ctx->discovery.seen_election_term) break;
+            if (term > ctx->discovery.seen_election_term) {
+                ctx->discovery.seen_election_term = term;
+                ctx->discovery.auto_seen_result = false;
+            }
+            ctx->discovery.auto_seen_result = true;
+            memcpy(ctx->discovery.auto_winner_mac, winner, 6);
+            cmp = mac_compare(ctx->discovery.auto_winner_mac, ctx->discovery.local_mac);
             if (cmp < 0) {
                 ctx->discovery.role = UMESH_ROLE_ROUTER;
                 if (ctx->discovery.node_id == UMESH_ADDR_COORDINATOR) {

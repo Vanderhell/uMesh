@@ -505,6 +505,7 @@ void net_tick(uint32_t now_ms)
     ctx->net.now_ms = now_ms;
     routing_expire(now_ms);
     discovery_set_now(now_ms);
+    discovery_tick(now_ms);
     if (ctx->net.routing_mode == UMESH_ROUTING_GRADIENT) {
         neighbor_expire(now_ms);
     }
