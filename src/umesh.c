@@ -108,6 +108,9 @@ static umesh_result_t validate_cfg(const umesh_cfg_t *cfg)
     if (!cfg->master_key && cfg->security != UMESH_SEC_NONE) {
         return UMESH_ERR_NULL_PTR;
     }
+    if (cfg->security != UMESH_SEC_NONE && cfg->security_epoch == 0) {
+        return UMESH_ERR_INVALID_DST;
+    }
     return UMESH_OK;
 }
 
@@ -404,6 +407,9 @@ umesh_result_t umesh_reset(void)
     net_leave();
     ctx->initialized = false;
     memset(&ctx->stats, 0, sizeof(ctx->stats));
+    ctx->sec.session_epoch = 0;
+    ctx->sec.protected_counter = 0;
+    memset(ctx->sec.replay, 0, sizeof(ctx->sec.replay));
     memset(ctx->cmd_cb, 0, sizeof(ctx->cmd_cb));
     ctx->rx_cb = NULL;
     ctx->role_notified = false;

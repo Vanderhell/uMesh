@@ -31,15 +31,15 @@ static void build_nonce(umesh_ctx_t *ctx, uint8_t src, uint8_t seq_lo, uint8_t s
 {
     nonce[0]  = src;
     nonce[1]  = ctx->sec.net_id;
-    nonce[2]  = seq_lo;
-    nonce[3]  = seq_hi;
-    nonce[4]  = ctx->sec.salt[0];
-    nonce[5]  = ctx->sec.salt[1];
-    nonce[6]  = ctx->sec.salt[2];
-    nonce[7]  = 0;
-    nonce[8]  = 0;
-    nonce[9]  = 0;
-    nonce[10] = 0;
+    nonce[2]  = (uint8_t)(ctx->sec.session_epoch & 0xFF);
+    nonce[3]  = (uint8_t)((ctx->sec.session_epoch >> 8) & 0xFF);
+    nonce[4]  = (uint8_t)((ctx->sec.session_epoch >> 16) & 0xFF);
+    nonce[5]  = (uint8_t)((ctx->sec.session_epoch >> 24) & 0xFF);
+    nonce[6]  = seq_lo;
+    nonce[7]  = seq_hi;
+    nonce[8]  = ctx->sec.salt[0];
+    nonce[9]  = ctx->sec.salt[1];
+    nonce[10] = ctx->sec.salt[2];
     nonce[11] = 0;
     nonce[12] = 0;
     nonce[13] = (uint8_t)((counter >> 16) & 0xFF);
@@ -93,7 +93,7 @@ static bool mic_verify_ct(const uint8_t *a, const uint8_t *b, uint8_t len)
 
 static void compute_mic(umesh_ctx_t *ctx, const umesh_frame_t *frame, uint8_t mic[4])
 {
-    uint8_t msg[8 + UMESH_MAX_PAYLOAD + UMESH_MIC_SIZE];
+    uint8_t msg[17 + UMESH_MAX_PAYLOAD + UMESH_MIC_SIZE];
     uint16_t msg_len;
     uint8_t full_mac[32];
 
@@ -101,13 +101,22 @@ static void compute_mic(umesh_ctx_t *ctx, const umesh_frame_t *frame, uint8_t mi
     msg[1] = frame->net_id;
     msg[2] = frame->src;
     msg[3] = frame->dst;
-    msg[4] = (uint8_t)(frame->seq_num & 0xFF);
-    msg[5] = (uint8_t)(frame->seq_num >> 8);
-    msg[6] = frame->cmd;
-    msg[7] = frame->flags;
-    msg_len = 8;
+    msg[4] = frame->link_src;
+    msg[5] = frame->link_dst;
+    msg[6] = (uint8_t)(frame->seq_num & 0xFF);
+    msg[7] = (uint8_t)(frame->seq_num >> 8);
+    msg[8] = frame->hop_count;
+    msg[9] = frame->cmd;
+    msg[10] = frame->flags;
+    msg[11] = (uint8_t)(frame->payload_len & 0xFF);
+    msg[12] = (uint8_t)(frame->payload_len >> 8);
+    msg[13] = (uint8_t)(ctx->sec.session_epoch & 0xFF);
+    msg[14] = (uint8_t)((ctx->sec.session_epoch >> 8) & 0xFF);
+    msg[15] = (uint8_t)((ctx->sec.session_epoch >> 16) & 0xFF);
+    msg[16] = (uint8_t)((ctx->sec.session_epoch >> 24) & 0xFF);
+    msg_len = 17;
     if (frame->payload_len > 0) {
-        memcpy(&msg[8], frame->payload, frame->payload_len);
+        memcpy(&msg[17], frame->payload, frame->payload_len);
         msg_len = (uint16_t)(msg_len + frame->payload_len);
     }
 
@@ -188,6 +197,8 @@ umesh_result_t sec_init(const uint8_t   *master_key,
 
     ctx->sec.level  = level;
     ctx->sec.net_id = net_id;
+    ctx->sec.session_epoch = 0;
+    ctx->sec.protected_counter = 0;
 
     for (i = 0; i < UMESH_MAX_NODES; i++) {
         ctx->sec.replay[i].valid = false;
@@ -195,6 +206,8 @@ umesh_result_t sec_init(const uint8_t   *master_key,
 
     if (level != UMESH_SEC_NONE) {
         if (!master_key) return UMESH_ERR_NULL_PTR;
+        if (ctx->cfg.security_epoch == 0) return UMESH_ERR_INVALID_DST;
+        ctx->sec.session_epoch = ctx->cfg.security_epoch;
         keys_derive(master_key, net_id, ctx->sec.enc_key, ctx->sec.auth_key);
         salt_init(ctx);
     } else {
@@ -214,6 +227,17 @@ umesh_result_t sec_encrypt_frame(umesh_frame_t *frame)
     if (!frame) return UMESH_ERR_NULL_PTR;
     if (ctx->sec.level == UMESH_SEC_NONE) return UMESH_OK;
 
+    if (frame->seq_num == 0) {
+        ctx->sec.protected_counter = (uint32_t)(ctx->sec.protected_counter + 1u);
+        frame->seq_num = (uint16_t)ctx->sec.protected_counter;
+    } else if (frame->seq_num > ctx->sec.protected_counter) {
+        ctx->sec.protected_counter = frame->seq_num;
+    }
+
+    if (frame->payload_len > UMESH_MAX_PAYLOAD) {
+        return UMESH_ERR_TOO_LONG;
+    }
+
     seq_lo = (uint8_t)(frame->seq_num & 0xFF);
     seq_hi = (uint8_t)(frame->seq_num >> 8);
 
@@ -224,10 +248,6 @@ umesh_result_t sec_encrypt_frame(umesh_frame_t *frame)
 
     frame->flags |= UMESH_FLAG_ENCRYPTED;
     compute_mic(ctx, frame, mic);
-    if ((size_t)frame->payload_len + UMESH_MIC_SIZE >
-        UMESH_MAX_PAYLOAD + UMESH_MIC_SIZE) {
-        return UMESH_ERR_TOO_LONG;
-    }
     memcpy(&frame->payload[frame->payload_len], mic, UMESH_MIC_SIZE);
     frame->payload_len = (uint16_t)(frame->payload_len + UMESH_MIC_SIZE);
     return UMESH_OK;

@@ -287,7 +287,9 @@ umesh_result_t net_route(umesh_frame_t *frame)
     frame->hop_count = UMESH_MAX_HOP_COUNT;
     frame->src = ctx->net.node_id;
     frame->link_src = ctx->net.node_id;
-    frame->seq_num = next_seq(ctx);
+    if (frame->seq_num == 0 && ctx->cfg.security == UMESH_SEC_NONE) {
+        frame->seq_num = next_seq(ctx);
+    }
     if (frame->link_dst == 0) {
         frame->link_dst = frame->dst;
     }

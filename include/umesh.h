@@ -247,6 +247,7 @@ typedef struct {
     uint32_t         deep_sleep_tx_interval_ms;
     uint32_t         scan_ms;
     uint32_t         election_ms;
+    uint32_t         security_epoch;
     void           (*on_joined)(uint8_t node_id);
     void           (*on_role_elected)(umesh_role_t role);
     void           (*on_node_joined)(uint8_t node_id);
@@ -382,6 +383,8 @@ typedef struct umesh_ctx_t {
         uint8_t auth_key[UMESH_KEY_SIZE];
         uint8_t salt[3];
         uint8_t net_id;
+        uint32_t session_epoch;
+        uint32_t protected_counter;
         umesh_replay_state_t replay[UMESH_MAX_NODES];
     } sec;
 
