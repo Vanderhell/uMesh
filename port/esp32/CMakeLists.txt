@@ -12,3 +12,5 @@ idf_component_register(
         esp_netif
         freertos
 )
+
+target_compile_definitions(${COMPONENT_LIB} PRIVATE UMESH_PORT_ESP32=1)
