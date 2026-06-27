@@ -1,50 +1,23 @@
 #include "net.h"
 #include "discovery.h"
 #include "routing.h"
+#include "../context.h"
 #include "../mac/mac.h"
 #include "../mac/frame.h"
 #include "../sec/sec.h"
 #include <string.h>
 
-static uint8_t       s_node_id = 0;
-static uint8_t       s_net_id = 0;
-static umesh_role_t  s_role = UMESH_ROLE_END_NODE;
-static umesh_role_t  s_role_cfg = UMESH_ROLE_END_NODE;
-static umesh_state_t s_state = UMESH_STATE_UNINIT;
-static uint16_t      s_seq_num = 0;
-
-static uint32_t      s_last_route_update_ms = 0;
-static uint32_t      s_last_coord_seen_ms = 0;
-static uint32_t      s_last_join_ms = 0;
-static uint32_t      s_state_enter_ms = 0;
-static uint32_t      s_now_ms = 0;
-static uint32_t      s_scan_ms = UMESH_DISCOVER_TIMEOUT_MS;
-static uint32_t      s_election_ms = UMESH_ELECTION_TIMEOUT_MS;
-static umesh_routing_mode_t s_routing_mode = UMESH_ROUTING_DISTANCE_VECTOR;
-static uint32_t      s_gradient_beacon_ms = UMESH_GRADIENT_BEACON_MS;
-static uint32_t      s_gradient_jitter_max_ms = UMESH_GRADIENT_JITTER_MAX_MS;
-static uint32_t      s_last_gradient_beacon_ms = 0;
-static uint32_t      s_last_election_result_ms = 0;
-#if UMESH_ENABLE_POWER_MANAGEMENT
-static umesh_power_mode_t s_power_mode = UMESH_POWER_ACTIVE;
-static uint32_t      s_light_sleep_interval_ms = UMESH_LIGHT_SLEEP_INTERVAL_MS;
-static uint32_t      s_light_listen_window_ms = UMESH_LIGHT_LISTEN_WINDOW_MS;
-static uint32_t      s_last_power_beacon_ms = 0;
-#endif
-
-static void (*s_net_rx_cb)(const umesh_frame_t *frame, int8_t rssi) = NULL;
-
 #define UMESH_JOIN_RETRY_MS 1000u
 #define UMESH_ELECTION_RESULT_ANNOUNCE_MS 1000u
 
-static uint16_t next_seq(void)
+static uint16_t next_seq(umesh_ctx_t *ctx)
 {
-    s_seq_num = (uint16_t)((s_seq_num + 1u) & 0x0FFF);
-    if (s_seq_num == 0) {
+    ctx->net.seq_num = (uint16_t)((ctx->net.seq_num + 1u) & 0x0FFF);
+    if (ctx->net.seq_num == 0) {
         sec_regenerate_salt();
-        s_seq_num = 1;
+        ctx->net.seq_num = 1;
     }
-    return s_seq_num;
+    return ctx->net.seq_num;
 }
 
 static umesh_result_t net_route_distance_vector(umesh_frame_t *frame)
@@ -64,80 +37,85 @@ static umesh_result_t net_route_distance_vector(umesh_frame_t *frame)
     return mac_send(frame);
 }
 
-static void enter_scanning(void)
+static void enter_scanning(umesh_ctx_t *ctx)
 {
-    s_role = UMESH_ROLE_ROUTER;
+    ctx->net.role = UMESH_ROLE_ROUTER;
     discovery_set_role(UMESH_ROLE_ROUTER);
     discovery_set_node_id(UMESH_ADDR_UNASSIGNED);
-    s_node_id = UMESH_ADDR_UNASSIGNED;
+    ctx->net.node_id = UMESH_ADDR_UNASSIGNED;
     mac_set_node_id(UMESH_ADDR_UNASSIGNED);
     discovery_auto_clear_scan_flag();
     discovery_auto_clear_election_flags();
     discovery_gradient_reset();
-    s_state = UMESH_STATE_SCANNING;
-    s_state_enter_ms = s_now_ms;
-    s_last_coord_seen_ms = s_now_ms;
+    ctx->net.state = UMESH_STATE_SCANNING;
+    ctx->net.state_enter_ms = ctx->net.now_ms;
+    ctx->net.last_coord_seen_ms = ctx->net.now_ms;
 }
 
 static void on_mac_rx(umesh_frame_t *frame, int8_t rssi)
 {
+    umesh_ctx_t *ctx = umesh_current_ctx();
     if (!frame) return;
-    if (frame->net_id != s_net_id) return;
+    if (frame->net_id != ctx->net.net_id) return;
 
     if (frame->src == UMESH_ADDR_COORDINATOR) {
-        s_last_coord_seen_ms = s_now_ms;
+        ctx->net.last_coord_seen_ms = ctx->net.now_ms;
     }
 
-    discovery_set_now(s_now_ms);
+    discovery_set_now(ctx->net.now_ms);
     discovery_on_frame(frame, rssi);
 
-    if (s_state == UMESH_STATE_JOINING) {
+    if (ctx->net.state == UMESH_STATE_JOINING) {
         uint8_t assigned = discovery_get_node_id();
         if (assigned != UMESH_ADDR_UNASSIGNED) {
-            s_node_id = assigned;
-            s_state = UMESH_STATE_CONNECTED;
-            s_role = discovery_get_role();
+            ctx->net.node_id = assigned;
+            ctx->net.state = UMESH_STATE_CONNECTED;
+            ctx->net.role = discovery_get_role();
             mac_set_node_id(assigned);
-            s_last_coord_seen_ms = s_now_ms;
+            ctx->net.last_coord_seen_ms = ctx->net.now_ms;
         }
     }
 
-    if (s_net_rx_cb) {
-        s_net_rx_cb(frame, rssi);
+    if (ctx->net.rx_cb) {
+        ctx->net.rx_cb(frame, rssi);
     }
 }
 
 umesh_result_t net_init(uint8_t net_id, uint8_t node_id, umesh_role_t role)
 {
-    s_net_id = net_id;
-    s_node_id = node_id;
-    s_role_cfg = role;
-    s_role = (role == UMESH_ROLE_AUTO) ? UMESH_ROLE_ROUTER : role;
-    s_state = UMESH_STATE_SCANNING;
-    s_seq_num = 0;
-    s_last_route_update_ms = 0;
-    s_last_coord_seen_ms = 0;
-    s_last_join_ms = 0;
-    s_state_enter_ms = 0;
-    s_now_ms = 0;
-    s_routing_mode = UMESH_ROUTING_DISTANCE_VECTOR;
-    s_gradient_beacon_ms = UMESH_GRADIENT_BEACON_MS;
-    s_gradient_jitter_max_ms = UMESH_GRADIENT_JITTER_MAX_MS;
-    s_last_gradient_beacon_ms = 0;
-    s_last_election_result_ms = 0;
+    umesh_ctx_t *ctx = umesh_current_ctx();
+    ctx->net.net_id = net_id;
+    ctx->net.node_id = node_id;
+    ctx->net.role_cfg = role;
+    ctx->net.role = (role == UMESH_ROLE_AUTO) ? UMESH_ROLE_ROUTER : role;
+    ctx->net.state = UMESH_STATE_SCANNING;
+    ctx->net.seq_num = 0;
+    ctx->net.last_route_update_ms = 0;
+    ctx->net.last_coord_seen_ms = 0;
+    ctx->net.last_join_ms = 0;
+    ctx->net.state_enter_ms = 0;
+    ctx->net.now_ms = 0;
+    ctx->net.scan_ms = UMESH_DISCOVER_TIMEOUT_MS;
+    ctx->net.election_ms = UMESH_ELECTION_TIMEOUT_MS;
+    ctx->net.routing_mode = UMESH_ROUTING_DISTANCE_VECTOR;
+    ctx->net.gradient_beacon_ms = UMESH_GRADIENT_BEACON_MS;
+    ctx->net.gradient_jitter_max_ms = UMESH_GRADIENT_JITTER_MAX_MS;
+    ctx->net.last_gradient_beacon_ms = 0;
+    ctx->net.last_election_result_ms = 0;
 #if UMESH_ENABLE_POWER_MANAGEMENT
-    s_power_mode = UMESH_POWER_ACTIVE;
-    s_light_sleep_interval_ms = UMESH_LIGHT_SLEEP_INTERVAL_MS;
-    s_light_listen_window_ms = UMESH_LIGHT_LISTEN_WINDOW_MS;
-    s_last_power_beacon_ms = 0;
+    ctx->net.power_mode = UMESH_POWER_ACTIVE;
+    ctx->net.light_sleep_interval_ms = UMESH_LIGHT_SLEEP_INTERVAL_MS;
+    ctx->net.light_listen_window_ms = UMESH_LIGHT_LISTEN_WINDOW_MS;
+    ctx->net.last_power_beacon_ms = 0;
 #endif
+    ctx->net.rx_cb = NULL;
 
     routing_init();
     mac_set_rx_callback(on_mac_rx);
 
     discovery_init(net_id, node_id, role);
-    discovery_set_auto_timing(s_scan_ms, s_election_ms);
-    discovery_enable_gradient(false, s_gradient_jitter_max_ms);
+    discovery_set_auto_timing(ctx->net.scan_ms, ctx->net.election_ms);
+    discovery_enable_gradient(false, ctx->net.gradient_jitter_max_ms);
 
     return UMESH_OK;
 }
@@ -145,9 +123,10 @@ umesh_result_t net_init(uint8_t net_id, uint8_t node_id, umesh_role_t role)
 void net_config_auto(uint32_t scan_ms, uint32_t election_ms,
                      const uint8_t local_mac[6])
 {
-    s_scan_ms = (scan_ms == 0) ? UMESH_DISCOVER_TIMEOUT_MS : scan_ms;
-    s_election_ms = (election_ms == 0) ? UMESH_ELECTION_TIMEOUT_MS : election_ms;
-    discovery_set_auto_timing(s_scan_ms, s_election_ms);
+    umesh_ctx_t *ctx = umesh_current_ctx();
+    ctx->net.scan_ms = (scan_ms == 0) ? UMESH_DISCOVER_TIMEOUT_MS : scan_ms;
+    ctx->net.election_ms = (election_ms == 0) ? UMESH_ELECTION_TIMEOUT_MS : election_ms;
+    discovery_set_auto_timing(ctx->net.scan_ms, ctx->net.election_ms);
     if (local_mac) {
         discovery_set_local_mac(local_mac);
     }
@@ -157,15 +136,16 @@ void net_config_routing(umesh_routing_mode_t routing_mode,
                         uint32_t gradient_beacon_ms,
                         uint32_t gradient_jitter_max_ms)
 {
-    s_routing_mode = routing_mode;
-    s_gradient_beacon_ms = (gradient_beacon_ms == 0)
+    umesh_ctx_t *ctx = umesh_current_ctx();
+    ctx->net.routing_mode = routing_mode;
+    ctx->net.gradient_beacon_ms = (gradient_beacon_ms == 0)
         ? UMESH_GRADIENT_BEACON_MS : gradient_beacon_ms;
-    s_gradient_jitter_max_ms = (gradient_jitter_max_ms == 0)
+    ctx->net.gradient_jitter_max_ms = (gradient_jitter_max_ms == 0)
         ? UMESH_GRADIENT_JITTER_MAX_MS : gradient_jitter_max_ms;
 
-    discovery_enable_gradient(s_routing_mode == UMESH_ROUTING_GRADIENT,
-                              s_gradient_jitter_max_ms);
-    if (s_routing_mode != UMESH_ROUTING_GRADIENT) {
+    discovery_enable_gradient(ctx->net.routing_mode == UMESH_ROUTING_GRADIENT,
+                              ctx->net.gradient_jitter_max_ms);
+    if (ctx->net.routing_mode != UMESH_ROUTING_GRADIENT) {
         discovery_gradient_reset();
     }
 }
@@ -175,13 +155,14 @@ void net_config_power(umesh_power_mode_t power_mode,
                       uint32_t light_listen_window_ms)
 {
 #if UMESH_ENABLE_POWER_MANAGEMENT
-    s_power_mode = power_mode;
-    s_light_sleep_interval_ms = (light_interval_ms == 0)
+    umesh_ctx_t *ctx = umesh_current_ctx();
+    ctx->net.power_mode = power_mode;
+    ctx->net.light_sleep_interval_ms = (light_interval_ms == 0)
         ? UMESH_LIGHT_SLEEP_INTERVAL_MS : light_interval_ms;
-    s_light_listen_window_ms = (light_listen_window_ms == 0)
+    ctx->net.light_listen_window_ms = (light_listen_window_ms == 0)
         ? UMESH_LIGHT_LISTEN_WINDOW_MS : light_listen_window_ms;
-    if (s_light_listen_window_ms > s_light_sleep_interval_ms) {
-        s_light_listen_window_ms = s_light_sleep_interval_ms;
+    if (ctx->net.light_listen_window_ms > ctx->net.light_sleep_interval_ms) {
+        ctx->net.light_listen_window_ms = ctx->net.light_sleep_interval_ms;
     }
 #else
     UMESH_UNUSED(power_mode);
@@ -192,51 +173,53 @@ void net_config_power(umesh_power_mode_t power_mode,
 
 umesh_result_t net_join(void)
 {
-    if (s_state == UMESH_STATE_UNINIT) return UMESH_ERR_NOT_INIT;
+    umesh_ctx_t *ctx = umesh_current_ctx();
+    if (ctx->net.state == UMESH_STATE_UNINIT) return UMESH_ERR_NOT_INIT;
 
-    if (s_role_cfg != UMESH_ROLE_AUTO) {
-        if (s_role == UMESH_ROLE_COORDINATOR) {
-            s_state = UMESH_STATE_CONNECTED;
-            s_node_id = UMESH_ADDR_COORDINATOR;
+    if (ctx->net.role_cfg != UMESH_ROLE_AUTO) {
+        if (ctx->net.role == UMESH_ROLE_COORDINATOR) {
+            ctx->net.state = UMESH_STATE_CONNECTED;
+            ctx->net.node_id = UMESH_ADDR_COORDINATOR;
             mac_set_node_id(UMESH_ADDR_COORDINATOR);
-            if (s_routing_mode == UMESH_ROUTING_GRADIENT) {
+            if (ctx->net.routing_mode == UMESH_ROUTING_GRADIENT) {
                 discovery_gradient_set_distance(0);
                 discovery_gradient_send_beacon(0);
-                s_last_gradient_beacon_ms = s_now_ms;
+                ctx->net.last_gradient_beacon_ms = ctx->net.now_ms;
             }
             return UMESH_OK;
         }
 
-        if (s_node_id != UMESH_ADDR_UNASSIGNED) {
-            s_state = UMESH_STATE_CONNECTED;
-            s_role = s_role_cfg;
-            mac_set_node_id(s_node_id);
+        if (ctx->net.node_id != UMESH_ADDR_UNASSIGNED) {
+            ctx->net.state = UMESH_STATE_CONNECTED;
+            ctx->net.role = ctx->net.role_cfg;
+            mac_set_node_id(ctx->net.node_id);
             routing_add(UMESH_ADDR_COORDINATOR, UMESH_ADDR_COORDINATOR,
                         1, UMESH_RSSI_GOOD, 0);
-            if (s_routing_mode == UMESH_ROUTING_GRADIENT &&
-                s_role == UMESH_ROLE_COORDINATOR) {
+            if (ctx->net.routing_mode == UMESH_ROUTING_GRADIENT &&
+                ctx->net.role == UMESH_ROLE_COORDINATOR) {
                 discovery_gradient_set_distance(0);
             }
-            s_last_route_update_ms =
+            ctx->net.last_route_update_ms =
                 (uint32_t)(0u - (UMESH_ROUTE_UPDATE_MS - 1000u));
-            s_last_coord_seen_ms = s_now_ms;
+            ctx->net.last_coord_seen_ms = ctx->net.now_ms;
             return UMESH_OK;
         }
 
-        s_state = UMESH_STATE_JOINING;
-        s_last_join_ms = s_now_ms;
+        ctx->net.state = UMESH_STATE_JOINING;
+        ctx->net.last_join_ms = ctx->net.now_ms;
         return discovery_join();
     }
 
-    enter_scanning();
+    enter_scanning(ctx);
     return UMESH_OK;
 }
 
 umesh_result_t net_trigger_election(void)
 {
-    if (s_state == UMESH_STATE_UNINIT) return UMESH_ERR_NOT_INIT;
-    s_role_cfg = UMESH_ROLE_AUTO;
-    enter_scanning();
+    umesh_ctx_t *ctx = umesh_current_ctx();
+    if (ctx->net.state == UMESH_STATE_UNINIT) return UMESH_ERR_NOT_INIT;
+    ctx->net.role_cfg = UMESH_ROLE_AUTO;
+    enter_scanning(ctx);
     return UMESH_OK;
 }
 
@@ -247,23 +230,24 @@ uint8_t net_gradient_distance(void)
 
 umesh_routing_mode_t net_get_routing_mode(void)
 {
-    return s_routing_mode;
+    return umesh_current_ctx()->net.routing_mode;
 }
 
 umesh_result_t net_gradient_refresh(void)
 {
-    if (s_routing_mode != UMESH_ROUTING_GRADIENT) {
+    umesh_ctx_t *ctx = umesh_current_ctx();
+    if (ctx->net.routing_mode != UMESH_ROUTING_GRADIENT) {
         return UMESH_ERR_NOT_ROUTABLE;
     }
-    if (s_state != UMESH_STATE_CONNECTED) {
+    if (ctx->net.state != UMESH_STATE_CONNECTED) {
         return UMESH_ERR_NOT_JOINED;
     }
-    if (s_role != UMESH_ROLE_COORDINATOR) {
+    if (ctx->net.role != UMESH_ROLE_COORDINATOR) {
         return UMESH_ERR_INVALID_DST;
     }
 
     discovery_gradient_set_distance(0);
-    s_last_gradient_beacon_ms = s_now_ms;
+    ctx->net.last_gradient_beacon_ms = ctx->net.now_ms;
     return discovery_gradient_send_beacon(0);
 }
 
@@ -279,27 +263,29 @@ bool net_get_neighbor(uint8_t index, umesh_neighbor_t *out)
 
 void net_leave(void)
 {
+    umesh_ctx_t *ctx = umesh_current_ctx();
     discovery_leave();
     discovery_gradient_reset();
-    s_state = UMESH_STATE_DISCONNECTED;
-    s_node_id = UMESH_ADDR_UNASSIGNED;
+    ctx->net.state = UMESH_STATE_DISCONNECTED;
+    ctx->net.node_id = UMESH_ADDR_UNASSIGNED;
 }
 
 umesh_result_t net_route(umesh_frame_t *frame)
 {
+    umesh_ctx_t *ctx = umesh_current_ctx();
     if (!frame) return UMESH_ERR_NULL_PTR;
-    if (s_state != UMESH_STATE_CONNECTED) return UMESH_ERR_NOT_JOINED;
+    if (ctx->net.state != UMESH_STATE_CONNECTED) return UMESH_ERR_NOT_JOINED;
 
     frame->hop_count = UMESH_MAX_HOP_COUNT;
-    frame->src = s_node_id;
-    frame->seq_num = next_seq();
+    frame->src = ctx->net.node_id;
+    frame->seq_num = next_seq(ctx);
 
-    if (s_routing_mode == UMESH_ROUTING_GRADIENT &&
+    if (ctx->net.routing_mode == UMESH_ROUTING_GRADIENT &&
         frame->dst == UMESH_ADDR_COORDINATOR) {
         uint8_t my_distance = discovery_gradient_distance();
         uint8_t next_hop;
 
-        if (s_node_id == UMESH_ADDR_COORDINATOR) {
+        if (ctx->net.node_id == UMESH_ADDR_COORDINATOR) {
             return UMESH_OK;
         }
 
@@ -317,22 +303,22 @@ umesh_result_t net_route(umesh_frame_t *frame)
 
 uint8_t net_get_node_id(void)
 {
-    return s_node_id;
+    return umesh_current_ctx()->net.node_id;
 }
 
 uint8_t net_get_state(void)
 {
-    return (uint8_t)s_state;
+    return (uint8_t)umesh_current_ctx()->net.state;
 }
 
 umesh_role_t net_get_role(void)
 {
-    return s_role;
+    return umesh_current_ctx()->net.role;
 }
 
 bool net_is_coordinator(void)
 {
-    return s_role == UMESH_ROLE_COORDINATOR;
+    return umesh_current_ctx()->net.role == UMESH_ROLE_COORDINATOR;
 }
 
 uint8_t net_get_node_count(void)
@@ -348,161 +334,162 @@ uint8_t net_get_node_count(void)
 
 void net_set_rx_callback(void (*cb)(const umesh_frame_t *frame, int8_t rssi))
 {
-    s_net_rx_cb = cb;
+    umesh_current_ctx()->net.rx_cb = cb;
 }
 
 void net_tick(uint32_t now_ms)
 {
+    umesh_ctx_t *ctx = umesh_current_ctx();
     uint8_t rebroadcast_distance = UINT8_MAX;
 
-    s_now_ms = now_ms;
+    ctx->net.now_ms = now_ms;
     routing_expire(now_ms);
     discovery_set_now(now_ms);
-    if (s_routing_mode == UMESH_ROUTING_GRADIENT) {
+    if (ctx->net.routing_mode == UMESH_ROUTING_GRADIENT) {
         neighbor_expire(now_ms);
     }
 
-    if (s_role_cfg == UMESH_ROLE_AUTO) {
-        if (s_state == UMESH_STATE_SCANNING) {
+    if (ctx->net.role_cfg == UMESH_ROLE_AUTO) {
+        if (ctx->net.state == UMESH_STATE_SCANNING) {
             if (discovery_auto_seen_coordinator()) {
                 discovery_auto_clear_scan_flag();
-                s_role = UMESH_ROLE_ROUTER;
+                ctx->net.role = UMESH_ROLE_ROUTER;
                 discovery_set_role(UMESH_ROLE_ROUTER);
-                s_state = UMESH_STATE_JOINING;
-                s_state_enter_ms = now_ms;
-                s_last_join_ms = now_ms;
+                ctx->net.state = UMESH_STATE_JOINING;
+                ctx->net.state_enter_ms = now_ms;
+                ctx->net.last_join_ms = now_ms;
                 discovery_join();
-            } else if (now_ms - s_state_enter_ms >= s_scan_ms) {
-                s_state = UMESH_STATE_ELECTION;
-                s_state_enter_ms = now_ms;
+            } else if (now_ms - ctx->net.state_enter_ms >= ctx->net.scan_ms) {
+                ctx->net.state = UMESH_STATE_ELECTION;
+                ctx->net.state_enter_ms = now_ms;
                 discovery_auto_clear_election_flags();
                 discovery_start_election();
             }
-        } else if (s_state == UMESH_STATE_ELECTION) {
+        } else if (ctx->net.state == UMESH_STATE_ELECTION) {
             if (discovery_auto_seen_election_result() ||
                 discovery_auto_saw_lower_mac()) {
-                s_role = UMESH_ROLE_ROUTER;
+                ctx->net.role = UMESH_ROLE_ROUTER;
                 discovery_set_role(UMESH_ROLE_ROUTER);
                 if (discovery_get_node_id() != UMESH_ADDR_UNASSIGNED) {
-                    s_node_id = discovery_get_node_id();
-                    mac_set_node_id(s_node_id);
+                    ctx->net.node_id = discovery_get_node_id();
+                    mac_set_node_id(ctx->net.node_id);
                     routing_add(UMESH_ADDR_COORDINATOR, UMESH_ADDR_COORDINATOR,
                                 1, UMESH_RSSI_GOOD, now_ms);
-                    s_state = UMESH_STATE_CONNECTED;
-                    s_state_enter_ms = now_ms;
-                    s_last_coord_seen_ms = now_ms;
+                    ctx->net.state = UMESH_STATE_CONNECTED;
+                    ctx->net.state_enter_ms = now_ms;
+                    ctx->net.last_coord_seen_ms = now_ms;
                 } else {
-                    s_state = UMESH_STATE_JOINING;
-                    s_state_enter_ms = now_ms;
-                    s_last_join_ms = now_ms;
+                    ctx->net.state = UMESH_STATE_JOINING;
+                    ctx->net.state_enter_ms = now_ms;
+                    ctx->net.last_join_ms = now_ms;
                     discovery_join();
                 }
-            } else if (now_ms - s_state_enter_ms >= s_election_ms) {
-                s_role = UMESH_ROLE_COORDINATOR;
-                s_node_id = UMESH_ADDR_COORDINATOR;
+            } else if (now_ms - ctx->net.state_enter_ms >= ctx->net.election_ms) {
+                ctx->net.role = UMESH_ROLE_COORDINATOR;
+                ctx->net.node_id = UMESH_ADDR_COORDINATOR;
                 discovery_auto_promote_to_coordinator();
-                s_last_election_result_ms = now_ms;
+                ctx->net.last_election_result_ms = now_ms;
                 mac_set_node_id(UMESH_ADDR_COORDINATOR);
-                if (s_routing_mode == UMESH_ROUTING_GRADIENT) {
+                if (ctx->net.routing_mode == UMESH_ROUTING_GRADIENT) {
                     discovery_gradient_set_distance(0);
                     discovery_gradient_send_beacon(0);
-                    s_last_gradient_beacon_ms = now_ms;
+                    ctx->net.last_gradient_beacon_ms = now_ms;
                 }
-                s_state = UMESH_STATE_CONNECTED;
-                s_state_enter_ms = now_ms;
-                s_last_coord_seen_ms = now_ms;
+                ctx->net.state = UMESH_STATE_CONNECTED;
+                ctx->net.state_enter_ms = now_ms;
+                ctx->net.last_coord_seen_ms = now_ms;
             }
         }
     }
 
-    if (s_state == UMESH_STATE_JOINING &&
-        s_role != UMESH_ROLE_COORDINATOR) {
-        if (now_ms - s_last_join_ms >= UMESH_JOIN_RETRY_MS) {
+    if (ctx->net.state == UMESH_STATE_JOINING &&
+        ctx->net.role != UMESH_ROLE_COORDINATOR) {
+        if (now_ms - ctx->net.last_join_ms >= UMESH_JOIN_RETRY_MS) {
             discovery_join();
-            s_last_join_ms = now_ms;
+            ctx->net.last_join_ms = now_ms;
         }
     }
 
-    if (s_state == UMESH_STATE_CONNECTED) {
+    if (ctx->net.state == UMESH_STATE_CONNECTED) {
 #if UMESH_ENABLE_POWER_MANAGEMENT
-        if (s_role == UMESH_ROLE_COORDINATOR &&
-            s_power_mode != UMESH_POWER_ACTIVE &&
-            now_ms - s_last_power_beacon_ms >= UMESH_POWER_BEACON_MS) {
+        if (ctx->net.role == UMESH_ROLE_COORDINATOR &&
+            ctx->net.power_mode != UMESH_POWER_ACTIVE &&
+            now_ms - ctx->net.last_power_beacon_ms >= UMESH_POWER_BEACON_MS) {
             umesh_frame_t pframe;
             memset(&pframe, 0, sizeof(pframe));
-            pframe.net_id = s_net_id;
+            pframe.net_id = ctx->net.net_id;
             pframe.dst = UMESH_ADDR_BROADCAST;
-            pframe.src = s_node_id;
+            pframe.src = ctx->net.node_id;
             pframe.cmd = UMESH_CMD_POWER_BEACON;
             pframe.flags = UMESH_FLAG_PRIO_NORMAL;
-            pframe.seq_num = next_seq();
+            pframe.seq_num = next_seq(ctx);
             pframe.hop_count = UMESH_MAX_HOP_COUNT;
             pframe.payload_len = 6;
-            pframe.payload[0] = (uint8_t)(s_light_sleep_interval_ms & 0xFF);
-            pframe.payload[1] = (uint8_t)(s_light_sleep_interval_ms >> 8);
-            pframe.payload[2] = (uint8_t)(s_light_listen_window_ms & 0xFF);
-            pframe.payload[3] = (uint8_t)(s_light_listen_window_ms >> 8);
-            pframe.payload[4] = 10; /* slot_count */
-            pframe.payload[5] = 0;  /* my_slot */
+            pframe.payload[0] = (uint8_t)(ctx->net.light_sleep_interval_ms & 0xFF);
+            pframe.payload[1] = (uint8_t)(ctx->net.light_sleep_interval_ms >> 8);
+            pframe.payload[2] = (uint8_t)(ctx->net.light_listen_window_ms & 0xFF);
+            pframe.payload[3] = (uint8_t)(ctx->net.light_listen_window_ms >> 8);
+            pframe.payload[4] = 10;
+            pframe.payload[5] = 0;
             mac_send(&pframe);
-            s_last_power_beacon_ms = now_ms;
+            ctx->net.last_power_beacon_ms = now_ms;
         }
 #endif
 
-        if (s_role_cfg == UMESH_ROLE_AUTO &&
-            s_role == UMESH_ROLE_COORDINATOR &&
-            now_ms - s_last_election_result_ms >= UMESH_ELECTION_RESULT_ANNOUNCE_MS) {
+        if (ctx->net.role_cfg == UMESH_ROLE_AUTO &&
+            ctx->net.role == UMESH_ROLE_COORDINATOR &&
+            now_ms - ctx->net.last_election_result_ms >= UMESH_ELECTION_RESULT_ANNOUNCE_MS) {
             discovery_broadcast_election_result();
-            s_last_election_result_ms = now_ms;
+            ctx->net.last_election_result_ms = now_ms;
         }
 
-        if (s_routing_mode == UMESH_ROUTING_GRADIENT) {
-            if (s_role == UMESH_ROLE_COORDINATOR) {
+        if (ctx->net.routing_mode == UMESH_ROUTING_GRADIENT) {
+            if (ctx->net.role == UMESH_ROLE_COORDINATOR) {
                 discovery_gradient_set_distance(0);
-                if ((s_last_gradient_beacon_ms == 0) ||
-                    (now_ms - s_last_gradient_beacon_ms >= s_gradient_beacon_ms)) {
+                if ((ctx->net.last_gradient_beacon_ms == 0) ||
+                    (now_ms - ctx->net.last_gradient_beacon_ms >= ctx->net.gradient_beacon_ms)) {
                     discovery_gradient_send_beacon(0);
-                    s_last_gradient_beacon_ms = now_ms;
+                    ctx->net.last_gradient_beacon_ms = now_ms;
                 }
             } else if (discovery_gradient_poll_rebroadcast(&rebroadcast_distance)) {
                 discovery_gradient_send_beacon(rebroadcast_distance);
             }
         }
 
-        if (now_ms - s_last_route_update_ms >= UMESH_ROUTE_UPDATE_MS) {
+        if (now_ms - ctx->net.last_route_update_ms >= UMESH_ROUTE_UPDATE_MS) {
             umesh_frame_t frame;
             memset(&frame, 0, sizeof(frame));
-            frame.net_id = s_net_id;
+            frame.net_id = ctx->net.net_id;
             frame.dst = UMESH_ADDR_BROADCAST;
-            frame.src = s_node_id;
+            frame.src = ctx->net.node_id;
             frame.cmd = UMESH_CMD_ROUTE_UPDATE;
             frame.flags = UMESH_FLAG_PRIO_NORMAL;
-            frame.seq_num = next_seq();
+            frame.seq_num = next_seq(ctx);
             frame.hop_count = UMESH_MAX_HOP_COUNT;
             mac_send(&frame);
-            s_last_route_update_ms = now_ms;
+            ctx->net.last_route_update_ms = now_ms;
         }
     }
 
-    if (s_role_cfg == UMESH_ROLE_AUTO &&
-        s_state == UMESH_STATE_CONNECTED &&
-        s_role != UMESH_ROLE_COORDINATOR) {
-        if (now_ms - s_last_coord_seen_ms > UMESH_NODE_TIMEOUT_MS) {
-            enter_scanning();
+    if (ctx->net.role_cfg == UMESH_ROLE_AUTO &&
+        ctx->net.state == UMESH_STATE_CONNECTED &&
+        ctx->net.role != UMESH_ROLE_COORDINATOR) {
+        if (now_ms - ctx->net.last_coord_seen_ms > UMESH_NODE_TIMEOUT_MS) {
+            enter_scanning(ctx);
         }
     }
 
-    if (s_role_cfg == UMESH_ROLE_AUTO &&
-        s_state == UMESH_STATE_CONNECTED &&
-        s_role == UMESH_ROLE_COORDINATOR &&
+    if (ctx->net.role_cfg == UMESH_ROLE_AUTO &&
+        ctx->net.state == UMESH_STATE_CONNECTED &&
+        ctx->net.role == UMESH_ROLE_COORDINATOR &&
         discovery_get_role() != UMESH_ROLE_COORDINATOR) {
-        s_role = UMESH_ROLE_ROUTER;
-        s_node_id = discovery_get_node_id();
-        mac_set_node_id(s_node_id);
-        if (s_node_id == UMESH_ADDR_UNASSIGNED) {
-            s_state = UMESH_STATE_JOINING;
-            s_state_enter_ms = now_ms;
-            s_last_join_ms = now_ms;
+        ctx->net.role = UMESH_ROLE_ROUTER;
+        ctx->net.node_id = discovery_get_node_id();
+        mac_set_node_id(ctx->net.node_id);
+        if (ctx->net.node_id == UMESH_ADDR_UNASSIGNED) {
+            ctx->net.state = UMESH_STATE_JOINING;
+            ctx->net.state_enter_ms = now_ms;
+            ctx->net.last_join_ms = now_ms;
             discovery_join();
         } else {
             routing_add(UMESH_ADDR_COORDINATOR, UMESH_ADDR_COORDINATOR,

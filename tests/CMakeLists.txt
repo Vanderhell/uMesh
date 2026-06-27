@@ -28,6 +28,7 @@ add_test(NAME test_frame COMMAND test_frame)
 # ── test_sec ─────────────────────────────────────────────
 add_executable(test_sec
     test_sec.c
+    ../src/context.c
     ../src/sec/sec.c
     ../src/sec/keys.c
     ../src/common/crc.c
@@ -50,6 +51,7 @@ add_test(NAME test_posix_loopback COMMAND test_posix_loopback)
 # ── test_mac ─────────────────────────────────────────────
 add_executable(test_mac
     test_mac.c
+    ../src/context.c
     ../src/mac/mac.c
     ../src/mac/cca.c
     ../src/mac/frame.c
@@ -70,6 +72,7 @@ add_test(NAME test_mac COMMAND test_mac)
 # ── test_routing ─────────────────────────────────────────
 add_executable(test_routing
     test_routing.c
+    ../src/context.c
     ../src/net/routing.c
 )
 target_include_directories(test_routing PRIVATE ../src)
@@ -78,6 +81,7 @@ add_test(NAME test_routing COMMAND test_routing)
 # ── test_net ─────────────────────────────────────────────
 add_executable(test_net
     test_net.c
+    ../src/context.c
     ../src/net/net.c
     ../src/net/routing.c
     ../src/net/discovery.c
@@ -101,6 +105,7 @@ add_test(NAME test_net COMMAND test_net)
 # ── test_e2e ─────────────────────────────────────────────
 add_executable(test_e2e
     test_e2e.c
+    ../src/context.c
     ../src/umesh.c
     ../src/net/net.c
     ../src/net/routing.c
@@ -126,6 +131,7 @@ add_test(NAME test_e2e COMMAND test_e2e)
 
 add_executable(test_election
     test_election.c
+    ../src/context.c
     ../src/net/net.c
     ../src/net/routing.c
     ../src/net/discovery.c
@@ -148,6 +154,7 @@ add_test(NAME test_election COMMAND test_election)
 
 add_executable(test_gradient
     test_gradient.c
+    ../src/context.c
     ../src/net/net.c
     ../src/net/routing.c
     ../src/net/discovery.c
@@ -170,6 +177,7 @@ add_test(NAME test_gradient COMMAND test_gradient)
 
 add_executable(test_power
     test_power.c
+    ../src/context.c
     ../src/umesh.c
     ../src/net/net.c
     ../src/net/routing.c
@@ -195,6 +203,7 @@ add_test(NAME test_power COMMAND test_power)
 
 add_executable(test_caps
     test_caps.c
+    ../src/context.c
     ../src/umesh.c
     ../src/net/net.c
     ../src/net/routing.c

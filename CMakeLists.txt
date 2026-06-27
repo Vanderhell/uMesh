@@ -27,6 +27,7 @@ else()
 endif()
 
 set(UMESH_SOURCES
+    src/context.c
     src/umesh.c
     src/phy/phy.c
     src/mac/mac.c

@@ -1,72 +1,41 @@
 #include "sec.h"
-#include "keys.h"
+#include "../context.h"
 #include <string.h>
 
 #ifdef UMESH_USE_MICROCRYPT
 #include "mcrypt.h"
 #else
-/* Forward declarations for built-in AES used in CTR mode */
 static void aes128_ecb_encrypt_block(const uint8_t key[16],
                                       const uint8_t in[16],
                                       uint8_t out[16]);
-/* Built-in SHA-256 / HMAC-SHA256 */
 static void hmac_sha256(const uint8_t *key, uint8_t key_len,
                         const uint8_t *data, uint16_t data_len,
                         uint8_t mac[32]);
 #endif
 
-/* ── Module state ──────────────────────────────────────── */
-
-#define MAX_REPLAY_STATES  UMESH_MAX_NODES
-
-typedef struct {
-    uint8_t  src_node;
-    uint16_t last_seq;
-    uint32_t window_bitmap;
-    bool     valid;
-} replay_state_t;
-
-static umesh_security_t s_level       = UMESH_SEC_NONE;
-static uint8_t          s_enc_key[16];
-static uint8_t          s_auth_key[16];
-static uint8_t          s_salt[3];   /* SALT = first 3 bytes SHA256(ENC_KEY) */
-static uint8_t          s_net_id     = 0;
-static replay_state_t   s_replay[MAX_REPLAY_STATES];
-
-/* ── Helpers ───────────────────────────────────────────── */
-
-static void salt_init(void)
+static void salt_init(umesh_ctx_t *ctx)
 {
     uint8_t digest[32];
 #ifdef UMESH_USE_MICROCRYPT
-    mcrypt_sha256(s_enc_key, 16, digest);
+    mcrypt_sha256(ctx->sec.enc_key, 16, digest);
 #else
-    /* Use a simple deterministic derivation from enc_key when no SHA256 */
-    /* This path is taken only when built-in fallback is used */
-    hmac_sha256(s_enc_key, 16, s_enc_key, 16, digest);
+    hmac_sha256(ctx->sec.enc_key, 16, ctx->sec.enc_key, 16, digest);
 #endif
-    s_salt[0] = digest[0];
-    s_salt[1] = digest[1];
-    s_salt[2] = digest[2];
+    ctx->sec.salt[0] = digest[0];
+    ctx->sec.salt[1] = digest[1];
+    ctx->sec.salt[2] = digest[2];
 }
 
-/*
- * Build AES-CTR NONCE (16 bytes):
- * [SRC_NODE(1)][NET_ID(1)][SEQ_NUM_LO(1)][SEQ_NUM_HI(1)]
- * [SALT(3)][COUNTER(9)]
- * Counter starts at 0, incremented per 16-byte block.
- */
-static void build_nonce(uint8_t src, uint8_t seq_lo, uint8_t seq_hi,
+static void build_nonce(umesh_ctx_t *ctx, uint8_t src, uint8_t seq_lo, uint8_t seq_hi,
                         uint32_t counter, uint8_t nonce[16])
 {
     nonce[0]  = src;
-    nonce[1]  = s_net_id;
+    nonce[1]  = ctx->sec.net_id;
     nonce[2]  = seq_lo;
     nonce[3]  = seq_hi;
-    nonce[4]  = s_salt[0];
-    nonce[5]  = s_salt[1];
-    nonce[6]  = s_salt[2];
-    /* 9 bytes for counter (big-endian) */
+    nonce[4]  = ctx->sec.salt[0];
+    nonce[5]  = ctx->sec.salt[1];
+    nonce[6]  = ctx->sec.salt[2];
     nonce[7]  = 0;
     nonce[8]  = 0;
     nonce[9]  = 0;
@@ -78,11 +47,7 @@ static void build_nonce(uint8_t src, uint8_t seq_lo, uint8_t seq_hi,
     nonce[15] = (uint8_t)( counter        & 0xFF);
 }
 
-/*
- * AES-CTR encrypt/decrypt (symmetric).
- * Uses ENC_KEY.
- */
-static void aes_ctr_crypt(uint8_t src, uint8_t seq_lo, uint8_t seq_hi,
+static void aes_ctr_crypt(umesh_ctx_t *ctx, uint8_t src, uint8_t seq_lo, uint8_t seq_hi,
                            uint8_t *data, uint8_t len)
 {
     uint8_t nonce[16];
@@ -94,16 +59,16 @@ static void aes_ctr_crypt(uint8_t src, uint8_t seq_lo, uint8_t seq_hi,
         uint8_t chunk = (uint8_t)(len - i);
         if (chunk > 16) chunk = 16;
 
-        build_nonce(src, seq_lo, seq_hi, block, nonce);
+        build_nonce(ctx, src, seq_lo, seq_hi, block, nonce);
 
 #ifdef UMESH_USE_MICROCRYPT
         {
-            mcrypt_aes128_t ctx;
-            mcrypt_aes128_init(&ctx, s_enc_key);
-            mcrypt_aes128_encrypt_block(&ctx, nonce, keystream);
+            mcrypt_aes128_t c;
+            mcrypt_aes128_init(&c, ctx->sec.enc_key);
+            mcrypt_aes128_encrypt_block(&c, nonce, keystream);
         }
 #else
-        aes128_ecb_encrypt_block(s_enc_key, nonce, keystream);
+        aes128_ecb_encrypt_block(ctx->sec.enc_key, nonce, keystream);
 #endif
         {
             uint8_t j;
@@ -116,9 +81,6 @@ static void aes_ctr_crypt(uint8_t src, uint8_t seq_lo, uint8_t seq_hi,
     }
 }
 
-/*
- * Constant-time MIC comparison (timing attack protection).
- */
 static bool mic_verify_ct(const uint8_t *a, const uint8_t *b, uint8_t len)
 {
     uint8_t diff = 0;
@@ -129,15 +91,11 @@ static bool mic_verify_ct(const uint8_t *a, const uint8_t *b, uint8_t len)
     return (diff == 0);
 }
 
-/*
- * Compute 4-byte MIC = first 4 bytes of HMAC-SHA256(AUTH_KEY,
- *   net_id || dst || src || seq_lo || seq_hi || encrypted_payload)
- */
-static void compute_mic(const umesh_frame_t *frame, uint8_t mic[4])
+static void compute_mic(umesh_ctx_t *ctx, const umesh_frame_t *frame, uint8_t mic[4])
 {
-    uint8_t  msg[6 + UMESH_MAX_PAYLOAD + UMESH_MIC_SIZE];
-    uint8_t  msg_len;
-    uint8_t  full_mac[32];
+    uint8_t msg[6 + UMESH_MAX_PAYLOAD + UMESH_MIC_SIZE];
+    uint8_t msg_len;
+    uint8_t full_mac[32];
 
     msg[0] = frame->net_id;
     msg[1] = frame->dst;
@@ -152,9 +110,9 @@ static void compute_mic(const umesh_frame_t *frame, uint8_t mic[4])
     }
 
 #ifdef UMESH_USE_MICROCRYPT
-    mcrypt_hmac_sha256(s_auth_key, 16, msg, msg_len, full_mac);
+    mcrypt_hmac_sha256(ctx->sec.auth_key, 16, msg, msg_len, full_mac);
 #else
-    hmac_sha256(s_auth_key, 16, msg, msg_len, full_mac);
+    hmac_sha256(ctx->sec.auth_key, 16, msg, msg_len, full_mac);
 #endif
 
     mic[0] = full_mac[0];
@@ -163,45 +121,40 @@ static void compute_mic(const umesh_frame_t *frame, uint8_t mic[4])
     mic[3] = full_mac[3];
 }
 
-/* ── Replay window ─────────────────────────────────────── */
-
-static replay_state_t *replay_find_or_alloc(uint8_t src)
+static umesh_replay_state_t *replay_find_or_alloc(umesh_ctx_t *ctx, uint8_t src)
 {
     uint8_t i;
-    for (i = 0; i < MAX_REPLAY_STATES; i++) {
-        if (s_replay[i].valid && s_replay[i].src_node == src) {
-            return &s_replay[i];
+    for (i = 0; i < UMESH_MAX_NODES; i++) {
+        if (ctx->sec.replay[i].valid && ctx->sec.replay[i].src_node == src) {
+            return &ctx->sec.replay[i];
         }
     }
-    /* Allocate new slot */
-    for (i = 0; i < MAX_REPLAY_STATES; i++) {
-        if (!s_replay[i].valid) {
-            s_replay[i].valid         = true;
-            s_replay[i].src_node      = src;
-            s_replay[i].last_seq      = 0;
-            s_replay[i].window_bitmap = 0;
-            return &s_replay[i];
+    for (i = 0; i < UMESH_MAX_NODES; i++) {
+        if (!ctx->sec.replay[i].valid) {
+            ctx->sec.replay[i].valid = true;
+            ctx->sec.replay[i].src_node = src;
+            ctx->sec.replay[i].last_seq = 0;
+            ctx->sec.replay[i].window_bitmap = 0;
+            return &ctx->sec.replay[i];
         }
     }
-    return NULL; /* table full */
+    return NULL;
 }
 
-static bool replay_check_and_update(uint8_t src, uint16_t seq)
+static bool replay_check_and_update(umesh_ctx_t *ctx, uint8_t src, uint16_t seq)
 {
-    replay_state_t *rs = replay_find_or_alloc(src);
+    umesh_replay_state_t *rs = replay_find_or_alloc(ctx, src);
     uint16_t delta;
 
-    if (!rs) return false; /* no slot — accept conservatively */
+    if (!rs) return false;
 
     if (!rs->window_bitmap && rs->last_seq == 0) {
-        /* First packet from this source */
-        rs->last_seq      = seq;
+        rs->last_seq = seq;
         rs->window_bitmap = 1;
         return true;
     }
 
     if (seq > rs->last_seq) {
-        /* New seq — advance window */
         delta = seq - rs->last_seq;
         if (delta >= UMESH_SEQ_WINDOW) {
             rs->window_bitmap = 0;
@@ -213,62 +166,61 @@ static bool replay_check_and_update(uint8_t src, uint16_t seq)
         return true;
     }
 
-    /* Old or duplicate */
     delta = rs->last_seq - seq;
     if (delta >= UMESH_SEQ_WINDOW) {
-        return false; /* too old */
+        return false;
     }
     if (rs->window_bitmap & ((uint32_t)1 << delta)) {
-        return false; /* duplicate */
+        return false;
     }
-    /* Within window, not yet seen */
     rs->window_bitmap |= ((uint32_t)1 << delta);
     return true;
 }
-
-/* ── Public API ────────────────────────────────────────── */
 
 umesh_result_t sec_init(const uint8_t   *master_key,
                         uint8_t          net_id,
                         umesh_security_t level)
 {
+    umesh_ctx_t *ctx = umesh_current_ctx();
     uint8_t i;
 
-    s_level  = level;
-    s_net_id = net_id;
+    ctx->sec.level  = level;
+    ctx->sec.net_id = net_id;
 
-    for (i = 0; i < MAX_REPLAY_STATES; i++) {
-        s_replay[i].valid = false;
+    for (i = 0; i < UMESH_MAX_NODES; i++) {
+        ctx->sec.replay[i].valid = false;
     }
 
     if (level != UMESH_SEC_NONE) {
-        keys_derive(master_key, net_id, s_enc_key, s_auth_key);
-        salt_init();
+        if (!master_key) return UMESH_ERR_NULL_PTR;
+        keys_derive(master_key, net_id, ctx->sec.enc_key, ctx->sec.auth_key);
+        salt_init(ctx);
+    } else {
+        memset(ctx->sec.enc_key, 0, sizeof(ctx->sec.enc_key));
+        memset(ctx->sec.auth_key, 0, sizeof(ctx->sec.auth_key));
+        memset(ctx->sec.salt, 0, sizeof(ctx->sec.salt));
     }
     return UMESH_OK;
 }
 
 umesh_result_t sec_encrypt_frame(umesh_frame_t *frame)
 {
+    umesh_ctx_t *ctx = umesh_current_ctx();
     uint8_t mic[4];
     uint8_t seq_lo, seq_hi;
 
     if (!frame) return UMESH_ERR_NULL_PTR;
-    if (s_level == UMESH_SEC_NONE) return UMESH_OK;
+    if (ctx->sec.level == UMESH_SEC_NONE) return UMESH_OK;
 
     seq_lo = (uint8_t)(frame->seq_num & 0xFF);
     seq_hi = (uint8_t)(frame->seq_num >> 8);
 
-    if (s_level == UMESH_SEC_FULL) {
-        /* 1. AES-CTR encrypt payload */
-        aes_ctr_crypt(frame->src, seq_lo, seq_hi,
+    if (ctx->sec.level == UMESH_SEC_FULL) {
+        aes_ctr_crypt(ctx, frame->src, seq_lo, seq_hi,
                       frame->payload, frame->payload_len);
     }
 
-    /* 2. Compute MIC over header + encrypted payload */
-    compute_mic(frame, mic);
-
-    /* 3. Append MIC after payload */
+    compute_mic(ctx, frame, mic);
     if (frame->payload_len + UMESH_MIC_SIZE >
         UMESH_MAX_PAYLOAD + UMESH_MIC_SIZE) {
         return UMESH_ERR_TOO_LONG;
@@ -281,39 +233,34 @@ umesh_result_t sec_encrypt_frame(umesh_frame_t *frame)
 
 umesh_result_t sec_decrypt_frame(umesh_frame_t *frame)
 {
+    umesh_ctx_t *ctx = umesh_current_ctx();
     uint8_t mic_received[UMESH_MIC_SIZE];
     uint8_t mic_computed[UMESH_MIC_SIZE];
     uint8_t seq_lo, seq_hi;
 
     if (!frame) return UMESH_ERR_NULL_PTR;
-    if (s_level == UMESH_SEC_NONE) return UMESH_OK;
+    if (ctx->sec.level == UMESH_SEC_NONE) return UMESH_OK;
 
     if (frame->payload_len < UMESH_MIC_SIZE) {
         return UMESH_ERR_MIC_FAIL;
     }
 
-    /* Strip MIC from end of payload */
     frame->payload_len = (uint8_t)(frame->payload_len - UMESH_MIC_SIZE);
-    memcpy(mic_received,
-           &frame->payload[frame->payload_len],
-           UMESH_MIC_SIZE);
+    memcpy(mic_received, &frame->payload[frame->payload_len], UMESH_MIC_SIZE);
 
-    /* 1. Verify MIC (over header + still-encrypted payload) */
-    compute_mic(frame, mic_computed);
+    compute_mic(ctx, frame, mic_computed);
     if (!mic_verify_ct(mic_received, mic_computed, UMESH_MIC_SIZE)) {
         return UMESH_ERR_MIC_FAIL;
     }
 
-    /* 2. Check replay */
-    if (!replay_check_and_update(frame->src, frame->seq_num)) {
+    if (!replay_check_and_update(ctx, frame->src, frame->seq_num)) {
         return UMESH_ERR_REPLAY;
     }
 
-    /* 3. AES-CTR decrypt */
-    if (s_level == UMESH_SEC_FULL) {
+    if (ctx->sec.level == UMESH_SEC_FULL) {
         seq_lo = (uint8_t)(frame->seq_num & 0xFF);
         seq_hi = (uint8_t)(frame->seq_num >> 8);
-        aes_ctr_crypt(frame->src, seq_lo, seq_hi,
+        aes_ctr_crypt(ctx, frame->src, seq_lo, seq_hi,
                       frame->payload, frame->payload_len);
     }
 
@@ -323,16 +270,11 @@ umesh_result_t sec_decrypt_frame(umesh_frame_t *frame)
 
 void sec_regenerate_salt(void)
 {
-    salt_init();
+    salt_init(umesh_current_ctx());
 }
 
-/* ──────────────────────────────────────────────────────────
- * Built-in AES-128 ECB + SHA-256 + HMAC-SHA256
- * (fallback — only compiled when microcrypt is not available)
- * ──────────────────────────────────────────────────────── */
 #ifndef UMESH_USE_MICROCRYPT
-
-/* ── AES-128 (same tables as in keys.c, duplicated for self-contained module) */
+/* Built-in AES-128 ECB + SHA-256 + HMAC-SHA256 fallback */
 static const uint8_t S_SBOX[256] = {
     0x63,0x7c,0x77,0x7b,0xf2,0x6b,0x6f,0xc5,0x30,0x01,0x67,0x2b,0xfe,0xd7,0xab,0x76,
     0xca,0x82,0xc9,0x7d,0xfa,0x59,0x47,0xf0,0xad,0xd4,0xa2,0xaf,0x9c,0xa4,0x72,0xc0,
@@ -432,10 +374,9 @@ static void aes128_ecb_encrypt_block(const uint8_t key[16],
     memcpy(out, state, 16);
 }
 
-/* ── SHA-256 ────────────────────────────────────────────── */
 #define ROTR32(x,n) (((x) >> (n)) | ((x) << (32-(n))))
 #define CH(x,y,z)   (((x)&(y))^(~(x)&(z)))
-#define MAJ(x,y,z)  (((x)&(y))^((x)&(z))^((y)&(z)))
+#define MAJ(x,y,z)   (((x)&(y))^((x)&(z))^((y)&(z)))
 #define S0(x)       (ROTR32(x,2)^ROTR32(x,13)^ROTR32(x,22))
 #define S1(x)       (ROTR32(x,6)^ROTR32(x,11)^ROTR32(x,25))
 #define G0(x)       (ROTR32(x,7)^ROTR32(x,18)^((x)>>3))
@@ -560,5 +501,4 @@ static void hmac_sha256(const uint8_t *key, uint8_t key_len,
     sha256_update(&ctx, inner, 32);
     sha256_final(&ctx, mac);
 }
-
-#endif /* !UMESH_USE_MICROCRYPT */
+#endif

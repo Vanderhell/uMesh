@@ -3,16 +3,6 @@
 
 #include "../common/defs.h"
 
-typedef struct {
-    uint8_t  dst_node;
-    uint8_t  next_hop;
-    uint8_t  hop_count;
-    int8_t   last_rssi;
-    uint8_t  metric;
-    uint32_t last_seen_ms;
-    bool     valid;
-} umesh_route_entry_t;
-
 void    routing_init(void);
 bool    routing_add(uint8_t dst, uint8_t next_hop,
                     uint8_t hops, int8_t rssi,
