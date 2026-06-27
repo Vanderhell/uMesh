@@ -20,11 +20,15 @@ static uint16_t next_seq(umesh_ctx_t *ctx)
     return ctx->net.seq_num;
 }
 
-static umesh_result_t net_route_distance_vector(umesh_frame_t *frame)
+static umesh_result_t net_route_distance_vector(umesh_ctx_t *ctx,
+                                                 umesh_frame_t *frame)
 {
     umesh_route_entry_t route;
+    uint8_t next_hop;
 
     if (frame->dst == UMESH_ADDR_BROADCAST) {
+        frame->link_src = ctx->net.node_id;
+        frame->link_dst = UMESH_ADDR_BROADCAST;
         return mac_send(frame);
     }
 
@@ -33,6 +37,10 @@ static umesh_result_t net_route_distance_vector(umesh_frame_t *frame)
             return UMESH_ERR_NOT_ROUTABLE;
         }
     }
+
+    next_hop = route.next_hop;
+    frame->link_src = ctx->net.node_id;
+    frame->link_dst = next_hop;
 
     return mac_send(frame);
 }
@@ -278,7 +286,11 @@ umesh_result_t net_route(umesh_frame_t *frame)
 
     frame->hop_count = UMESH_MAX_HOP_COUNT;
     frame->src = ctx->net.node_id;
+    frame->link_src = ctx->net.node_id;
     frame->seq_num = next_seq(ctx);
+    if (frame->link_dst == 0) {
+        frame->link_dst = frame->dst;
+    }
 
     if (ctx->net.routing_mode == UMESH_ROUTING_GRADIENT &&
         frame->dst == UMESH_ADDR_COORDINATOR) {
@@ -293,9 +305,9 @@ umesh_result_t net_route(umesh_frame_t *frame)
         if (next_hop == UMESH_ADDR_BROADCAST) {
             return UMESH_ERR_NOT_ROUTABLE;
         }
-        frame->dst = next_hop;
+        frame->link_dst = next_hop;
     } else {
-        return net_route_distance_vector(frame);
+        return net_route_distance_vector(ctx, frame);
     }
 
     return mac_send(frame);
@@ -417,9 +429,12 @@ void net_tick(uint32_t now_ms)
             now_ms - ctx->net.last_power_beacon_ms >= UMESH_POWER_BEACON_MS) {
             umesh_frame_t pframe;
             memset(&pframe, 0, sizeof(pframe));
+            pframe.wire_version = UMESH_WIRE_VERSION;
             pframe.net_id = ctx->net.net_id;
             pframe.dst = UMESH_ADDR_BROADCAST;
             pframe.src = ctx->net.node_id;
+            pframe.link_src = ctx->net.node_id;
+            pframe.link_dst = UMESH_ADDR_BROADCAST;
             pframe.cmd = UMESH_CMD_POWER_BEACON;
             pframe.flags = UMESH_FLAG_PRIO_NORMAL;
             pframe.seq_num = next_seq(ctx);
@@ -459,9 +474,12 @@ void net_tick(uint32_t now_ms)
         if (now_ms - ctx->net.last_route_update_ms >= UMESH_ROUTE_UPDATE_MS) {
             umesh_frame_t frame;
             memset(&frame, 0, sizeof(frame));
+            frame.wire_version = UMESH_WIRE_VERSION;
             frame.net_id = ctx->net.net_id;
             frame.dst = UMESH_ADDR_BROADCAST;
             frame.src = ctx->net.node_id;
+            frame.link_src = ctx->net.node_id;
+            frame.link_dst = UMESH_ADDR_BROADCAST;
             frame.cmd = UMESH_CMD_ROUTE_UPDATE;
             frame.flags = UMESH_FLAG_PRIO_NORMAL;
             frame.seq_num = next_seq(ctx);

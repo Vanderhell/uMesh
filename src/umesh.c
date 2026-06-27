@@ -428,9 +428,12 @@ umesh_result_t umesh_send(uint8_t dst, uint8_t cmd,
     if (!payload && len > 0) return UMESH_ERR_NULL_PTR;
 
     memset(&frame, 0, sizeof(frame));
+    frame.wire_version = UMESH_WIRE_VERSION;
     frame.net_id      = ctx->cfg.net_id;
     frame.dst         = dst;
     frame.src         = net_get_node_id();
+    frame.link_src    = frame.src;
+    frame.link_dst    = dst;
     frame.flags       = flags;
     frame.cmd         = cmd;
     frame.payload_len = len;
@@ -666,6 +669,7 @@ const char *umesh_err_str(umesh_result_t err)
     case UMESH_ERR_NULL_PTR:     return "NULL_PTR";
     case UMESH_ERR_NOT_INIT:     return "NOT_INIT";
     case UMESH_ERR_HARDWARE:     return "HARDWARE";
+    case UMESH_ERR_CRC_FAIL:     return "CRC_FAIL";
     case UMESH_ERR_MIC_FAIL:     return "MIC_FAIL";
     case UMESH_ERR_REPLAY:       return "REPLAY";
     case UMESH_ERR_NOT_SUPPORTED:return "NOT_SUPPORTED";

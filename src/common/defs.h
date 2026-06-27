@@ -8,9 +8,6 @@
 
 #include "../../include/umesh.h"
 
-/* Internal frame header size, shared by MAC and tests. */
-#define UMESH_FRAME_HEADER_SIZE  9
-
 #define UMESH_ARRAY_SIZE(a)  (sizeof(a) / sizeof((a)[0]))
 #define UMESH_UNUSED(x)      (void)(x)
 #define UMESH_MIN(a,b)       ((a) < (b) ? (a) : (b))

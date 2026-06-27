@@ -107,12 +107,17 @@ typedef enum {
 #define UMESH_FLAG_ACK_REQ     (1 << 0)
 #define UMESH_FLAG_IS_ACK      (1 << 1)
 #define UMESH_FLAG_ENCRYPTED   (1 << 2)
-#define UMESH_FLAG_FRAGMENT    (1 << 3)
 #define UMESH_FLAG_PRIO_MASK   (3 << 6)
 #define UMESH_FLAG_PRIO_HIGH   (3 << 6)
 #define UMESH_FLAG_PRIO_NORMAL (2 << 6)
 #define UMESH_FLAG_PRIO_LOW    (1 << 6)
 #define UMESH_FLAG_PRIO_BULK   (0 << 6)
+#define UMESH_FLAG_VALID_MASK  (UMESH_FLAG_ACK_REQ | \
+                                UMESH_FLAG_IS_ACK | \
+                                UMESH_FLAG_ENCRYPTED | \
+                                UMESH_FLAG_PRIO_MASK)
+
+#define UMESH_WIRE_VERSION      1
 
 #define UMESH_CAP_WIFI      (1u << 0)
 #define UMESH_CAP_BT        (1u << 1)
@@ -160,9 +165,10 @@ typedef enum {
     UMESH_ERR_NULL_PTR      =  9,
     UMESH_ERR_NOT_INIT      = 10,
     UMESH_ERR_HARDWARE      = 11,
-    UMESH_ERR_MIC_FAIL      = 12,
-    UMESH_ERR_REPLAY        = 13,
-    UMESH_ERR_NOT_SUPPORTED = 14,
+    UMESH_ERR_CRC_FAIL      = 12,
+    UMESH_ERR_MIC_FAIL      = 13,
+    UMESH_ERR_REPLAY        = 14,
+    UMESH_ERR_NOT_SUPPORTED = 15,
 } umesh_result_t;
 
 typedef struct {
@@ -208,17 +214,18 @@ typedef struct {
     uint32_t drop_count;
 } mac_stats_t;
 
-typedef struct umesh_frame_t umesh_frame_t;
-
 typedef struct umesh_frame_t {
+    uint8_t  wire_version;
     uint8_t  net_id;
-    uint8_t  dst;
     uint8_t  src;
-    uint8_t  flags;
-    uint8_t  cmd;
-    uint8_t  payload_len;
+    uint8_t  dst;
+    uint8_t  link_src;
+    uint8_t  link_dst;
     uint16_t seq_num;
     uint8_t  hop_count;
+    uint8_t  cmd;
+    uint8_t  flags;
+    uint16_t payload_len;
     uint8_t  payload[UMESH_MAX_PAYLOAD + UMESH_MIC_SIZE];
     uint16_t crc;
 } umesh_frame_t;

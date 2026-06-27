@@ -59,9 +59,12 @@ static umesh_result_t send_frame(uint8_t dst, uint8_t cmd,
     umesh_ctx_t *ctx = umesh_current_ctx();
     umesh_frame_t frame;
     memset(&frame, 0, sizeof(frame));
+    frame.wire_version = UMESH_WIRE_VERSION;
     frame.net_id = ctx->discovery.net_id;
     frame.dst = dst;
     frame.src = ctx->discovery.node_id;
+    frame.link_src = ctx->discovery.node_id;
+    frame.link_dst = dst;
     frame.flags = flags;
     frame.cmd = cmd;
     frame.seq_num = next_seq(ctx);

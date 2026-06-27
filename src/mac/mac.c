@@ -69,15 +69,18 @@ static void on_phy_rx(const uint8_t *buf, uint8_t len, int8_t rssi)
     }
 
     if ((frame.flags & UMESH_FLAG_ACK_REQ) &&
-        (frame.dst == ctx->mac.node_id || frame.dst == UMESH_ADDR_BROADCAST)) {
+        (frame.link_dst == ctx->mac.node_id || frame.link_dst == UMESH_ADDR_BROADCAST)) {
         umesh_frame_t ack;
-        uint8_t ack_buf[UMESH_FRAME_HEADER_SIZE + 2];
-        uint8_t ack_len = 0;
+        uint8_t ack_buf[UMESH_FRAME_MIN_SIZE];
+        size_t ack_len = 0;
 
         memset(&ack, 0, sizeof(ack));
+        ack.wire_version = UMESH_WIRE_VERSION;
         ack.net_id      = frame.net_id;
-        ack.dst         = frame.src;
+        ack.dst         = frame.link_src;
         ack.src         = ctx->mac.node_id;
+        ack.link_src    = ctx->mac.node_id;
+        ack.link_dst    = frame.link_src;
         ack.flags       = (uint8_t)(UMESH_FLAG_IS_ACK | UMESH_FLAG_PRIO_HIGH);
         ack.cmd         = frame.cmd;
         ack.seq_num     = frame.seq_num;
@@ -85,7 +88,9 @@ static void on_phy_rx(const uint8_t *buf, uint8_t len, int8_t rssi)
 
         if (frame_serialize(&ack, ack_buf, sizeof(ack_buf), &ack_len)
             == UMESH_OK) {
-            phy_send(ack_buf, ack_len);
+            if (ack_len <= UINT8_MAX) {
+                phy_send(ack_buf, (uint8_t)ack_len);
+            }
         }
     }
 
@@ -129,15 +134,27 @@ umesh_result_t mac_send(umesh_frame_t *frame)
 {
     umesh_ctx_t *ctx = umesh_current_ctx();
     uint8_t buf[UMESH_MAX_FRAME_SIZE];
-    uint8_t len = 0;
+    size_t len = 0;
     umesh_result_t r;
     bool needs_ack;
     uint8_t retry;
 
     if (!frame) return UMESH_ERR_NULL_PTR;
+    if (frame->wire_version == 0) {
+        frame->wire_version = UMESH_WIRE_VERSION;
+    }
+    if (frame->src == 0) {
+        frame->src = ctx->mac.node_id;
+    }
+    if (frame->link_src == 0) {
+        frame->link_src = ctx->mac.node_id;
+    }
+    if (frame->link_dst == 0) {
+        frame->link_dst = frame->dst;
+    }
 
     needs_ack = (frame->flags & UMESH_FLAG_ACK_REQ) &&
-                (frame->dst != UMESH_ADDR_BROADCAST);
+                (frame->link_dst != UMESH_ADDR_BROADCAST);
 
     if (!(frame->flags & UMESH_FLAG_IS_ACK)) {
         r = sec_encrypt_frame(frame);
@@ -153,7 +170,11 @@ umesh_result_t mac_send(umesh_frame_t *frame)
             ctx->mac.stats.retry_count++;
         }
 
-        r = phy_send_with_cca(buf, len);
+        if (len > UINT8_MAX) {
+            return UMESH_ERR_TOO_LONG;
+        }
+
+        r = phy_send_with_cca(buf, (uint8_t)len);
         if (r != UMESH_OK) continue;
 
         ctx->mac.stats.tx_count++;
@@ -163,7 +184,7 @@ umesh_result_t mac_send(umesh_frame_t *frame)
         }
 
         ctx->mac.waiting_ack  = true;
-        ctx->mac.ack_src      = frame->dst;
+        ctx->mac.ack_src      = frame->link_dst;
         ctx->mac.ack_seq      = frame->seq_num;
         ctx->mac.ack_received = false;
 

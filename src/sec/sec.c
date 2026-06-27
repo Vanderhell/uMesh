@@ -48,11 +48,11 @@ static void build_nonce(umesh_ctx_t *ctx, uint8_t src, uint8_t seq_lo, uint8_t s
 }
 
 static void aes_ctr_crypt(umesh_ctx_t *ctx, uint8_t src, uint8_t seq_lo, uint8_t seq_hi,
-                           uint8_t *data, uint8_t len)
+                           uint8_t *data, uint16_t len)
 {
     uint8_t nonce[16];
     uint8_t keystream[16];
-    uint8_t i = 0;
+    uint16_t i = 0;
     uint32_t block = 0;
 
     while (i < len) {
@@ -93,20 +93,22 @@ static bool mic_verify_ct(const uint8_t *a, const uint8_t *b, uint8_t len)
 
 static void compute_mic(umesh_ctx_t *ctx, const umesh_frame_t *frame, uint8_t mic[4])
 {
-    uint8_t msg[6 + UMESH_MAX_PAYLOAD + UMESH_MIC_SIZE];
-    uint8_t msg_len;
+    uint8_t msg[8 + UMESH_MAX_PAYLOAD + UMESH_MIC_SIZE];
+    uint16_t msg_len;
     uint8_t full_mac[32];
 
-    msg[0] = frame->net_id;
-    msg[1] = frame->dst;
+    msg[0] = frame->wire_version;
+    msg[1] = frame->net_id;
     msg[2] = frame->src;
-    msg[3] = (uint8_t)(frame->seq_num & 0xFF);
-    msg[4] = (uint8_t)(frame->seq_num >> 8);
-    msg[5] = frame->cmd;
-    msg_len = 6;
+    msg[3] = frame->dst;
+    msg[4] = (uint8_t)(frame->seq_num & 0xFF);
+    msg[5] = (uint8_t)(frame->seq_num >> 8);
+    msg[6] = frame->cmd;
+    msg[7] = frame->flags;
+    msg_len = 8;
     if (frame->payload_len > 0) {
-        memcpy(&msg[6], frame->payload, frame->payload_len);
-        msg_len = (uint8_t)(msg_len + frame->payload_len);
+        memcpy(&msg[8], frame->payload, frame->payload_len);
+        msg_len = (uint16_t)(msg_len + frame->payload_len);
     }
 
 #ifdef UMESH_USE_MICROCRYPT
@@ -220,14 +222,14 @@ umesh_result_t sec_encrypt_frame(umesh_frame_t *frame)
                       frame->payload, frame->payload_len);
     }
 
+    frame->flags |= UMESH_FLAG_ENCRYPTED;
     compute_mic(ctx, frame, mic);
-    if (frame->payload_len + UMESH_MIC_SIZE >
+    if ((size_t)frame->payload_len + UMESH_MIC_SIZE >
         UMESH_MAX_PAYLOAD + UMESH_MIC_SIZE) {
         return UMESH_ERR_TOO_LONG;
     }
     memcpy(&frame->payload[frame->payload_len], mic, UMESH_MIC_SIZE);
-    frame->payload_len = (uint8_t)(frame->payload_len + UMESH_MIC_SIZE);
-    frame->flags |= UMESH_FLAG_ENCRYPTED;
+    frame->payload_len = (uint16_t)(frame->payload_len + UMESH_MIC_SIZE);
     return UMESH_OK;
 }
 
@@ -245,7 +247,7 @@ umesh_result_t sec_decrypt_frame(umesh_frame_t *frame)
         return UMESH_ERR_MIC_FAIL;
     }
 
-    frame->payload_len = (uint8_t)(frame->payload_len - UMESH_MIC_SIZE);
+    frame->payload_len = (uint16_t)(frame->payload_len - UMESH_MIC_SIZE);
     memcpy(mic_received, &frame->payload[frame->payload_len], UMESH_MIC_SIZE);
 
     compute_mic(ctx, frame, mic_computed);
