@@ -47,6 +47,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-06-27
+
+### Added
+
+- Versioned multi-hop wire frame format with explicit version, source/destination separation, hop limit, flags, payload length, and integrity trailer
+- Join and election state binding to stable device identity and transaction tokens
+- Context-owned packet identity, replay rejection, and authenticated ACK matching
+- Bounded forwarding, duplicate suppression, and route freshness checks
+- Power-management corrections, explicit current-estimate API, and unsupported-measurement rejection
+- ESP32 compile integration updates, POSIX/ESP32 smoke coverage, and CI workflow
+
+### Changed
+
+- Release metadata now targets `v1.5.0` while keeping `v1.4.0` historical
+- Documentation now separates package version, wire protocol version, and compatibility wrappers
+
+### Fixed
+
+- Protected header and ACK handling now reject stale, duplicate, wrong-sender, wrong-destination, and bad-MIC traffic
+- Power beacon payload handling now uses explicit 32-bit fields and rejects unsupported claims
+
 ## [1.4.0] - 2026-03-24
 
 ### Added

@@ -3,12 +3,21 @@
 #include "routing.h"
 #include "../context.h"
 #include "../mac/mac.h"
+#include "../mac/cca.h"
 #include "../mac/frame.h"
 #include "../sec/sec.h"
 #include <string.h>
 
 #define UMESH_JOIN_RETRY_MS 1000u
 #define UMESH_ELECTION_RESULT_ANNOUNCE_MS 1000u
+
+static void write_u32le(uint8_t out[4], uint32_t value)
+{
+    out[0] = (uint8_t)(value & 0xFFu);
+    out[1] = (uint8_t)((value >> 8) & 0xFFu);
+    out[2] = (uint8_t)((value >> 16) & 0xFFu);
+    out[3] = (uint8_t)((value >> 24) & 0xFFu);
+}
 
 static uint16_t next_seq(umesh_ctx_t *ctx)
 {
@@ -588,13 +597,9 @@ void net_tick(uint32_t now_ms)
             pframe.flags = UMESH_FLAG_PRIO_NORMAL;
             pframe.seq_num = next_seq(ctx);
             pframe.hop_count = UMESH_MAX_HOP_COUNT;
-            pframe.payload_len = 6;
-            pframe.payload[0] = (uint8_t)(ctx->net.light_sleep_interval_ms & 0xFF);
-            pframe.payload[1] = (uint8_t)(ctx->net.light_sleep_interval_ms >> 8);
-            pframe.payload[2] = (uint8_t)(ctx->net.light_listen_window_ms & 0xFF);
-            pframe.payload[3] = (uint8_t)(ctx->net.light_listen_window_ms >> 8);
-            pframe.payload[4] = 10;
-            pframe.payload[5] = 0;
+            pframe.payload_len = 8;
+            write_u32le(&pframe.payload[0], ctx->net.light_sleep_interval_ms);
+            write_u32le(&pframe.payload[4], ctx->net.light_listen_window_ms);
             mac_send(&pframe);
             ctx->net.last_power_beacon_ms = now_ms;
         }

@@ -11,6 +11,7 @@
 #ifdef UMESH_PORT_ESP32
 
 #include "../../src/phy/phy_hal.h"
+#include "esp_err.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_netif.h"
@@ -35,6 +36,24 @@ static void (*s_rx_cb)(const uint8_t*, uint8_t, int8_t) = NULL;
 static uint8_t       s_net_id   = 0;
 static QueueHandle_t s_rx_queue = NULL;
 static TaskHandle_t  s_rx_task  = NULL;
+
+static void cleanup_resources(bool wifi_started)
+{
+    if (wifi_started) {
+        esp_wifi_set_promiscuous(false);
+        esp_wifi_stop();
+        esp_wifi_deinit();
+    }
+    if (s_rx_task) {
+        vTaskDelete(s_rx_task);
+        s_rx_task = NULL;
+    }
+    if (s_rx_queue) {
+        vQueueDelete(s_rx_queue);
+        s_rx_queue = NULL;
+    }
+    s_rx_cb = NULL;
+}
 
 /* 802.11 Data frame header template */
 static const uint8_t S_80211_HDR[24] = {
@@ -74,13 +93,14 @@ static void IRAM_ATTR promisc_cb(void *buf,
 
     wifi_promiscuous_pkt_t *pkt = (wifi_promiscuous_pkt_t *)buf;
     uint8_t *frame = pkt->payload;
+    int32_t payload_len = (int32_t)pkt->rx_ctrl.sig_len - 24;
 
     /* Quick filter: µMesh BSSID prefix + NET_ID */
+    if (pkt->rx_ctrl.sig_len < 24) return;
     if (frame[16] != 0xAC) return;
     if (frame[17] != 0x00) return;
     if (frame[18] != s_net_id) return;
 
-    int32_t payload_len = (int32_t)pkt->rx_ctrl.sig_len - 24;
     if (payload_len <= 0 || payload_len > UMESH_MAX_FRAME_SIZE) return;
 
     /* Use a static item buffer — callback is not re-entrant on ESP32 */
@@ -90,15 +110,21 @@ static void IRAM_ATTR promisc_cb(void *buf,
     item.rssi = pkt->rx_ctrl.rssi;
 
     BaseType_t hp_woken = pdFALSE;
-    xQueueSendFromISR(s_rx_queue, &item, &hp_woken);
-    if (hp_woken) portYIELD_FROM_ISR();
+    if (xQueueSendFromISR(s_rx_queue, &item, &hp_woken) == pdTRUE) {
+        if (hp_woken) portYIELD_FROM_ISR();
+    }
 }
 
 /* ── HAL API ────────────────────────────────────────────────────────────  */
 
 umesh_result_t phy_hal_init(const umesh_phy_cfg_t *cfg)
 {
+    esp_err_t err;
+    bool wifi_started = false;
+
+    if (!cfg) return UMESH_ERR_NULL_PTR;
     s_net_id = cfg->net_id;
+    s_rx_cb = NULL;
 
     /* Create RX queue and processing task before enabling promiscuous */
     s_rx_queue = xQueueCreate(RX_QUEUE_DEPTH, sizeof(rx_item_t));
@@ -111,37 +137,59 @@ umesh_result_t phy_hal_init(const umesh_phy_cfg_t *cfg)
         return UMESH_ERR_HARDWARE;
     }
 
-    esp_netif_init();
-    esp_event_loop_create_default();
+    err = esp_netif_init();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        cleanup_resources(false);
+        return UMESH_ERR_HARDWARE;
+    }
+    err = esp_event_loop_create_default();
+    if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
+        cleanup_resources(false);
+        return UMESH_ERR_HARDWARE;
+    }
 
     wifi_init_config_t wcfg = WIFI_INIT_CONFIG_DEFAULT();
-    esp_wifi_init(&wcfg);
-    esp_wifi_set_mode(WIFI_MODE_STA);
-    esp_wifi_start();
-    esp_wifi_set_channel(cfg->channel, WIFI_SECOND_CHAN_NONE);
-    esp_wifi_set_max_tx_power(cfg->tx_power);
+    err = esp_wifi_init(&wcfg);
+    if (err != ESP_OK) goto fail;
+    err = esp_wifi_set_mode(WIFI_MODE_STA);
+    if (err != ESP_OK) goto fail;
+    err = esp_wifi_start();
+    if (err != ESP_OK) goto fail;
+    wifi_started = true;
+    err = esp_wifi_set_channel(cfg->channel, WIFI_SECOND_CHAN_NONE);
+    if (err != ESP_OK) goto fail;
+    err = esp_wifi_set_max_tx_power(cfg->tx_power);
+    if (err != ESP_OK) goto fail;
 
     wifi_promiscuous_filter_t filter = {
         .filter_mask = WIFI_PROMIS_FILTER_MASK_DATA
     };
-    esp_wifi_set_promiscuous_filter(&filter);
+    err = esp_wifi_set_promiscuous_filter(&filter);
+    if (err != ESP_OK) goto fail;
     esp_wifi_set_promiscuous_rx_cb(promisc_cb);
-    esp_wifi_set_promiscuous(true);
+    err = esp_wifi_set_promiscuous(true);
+    if (err != ESP_OK) goto fail;
 
     return UMESH_OK;
+
+fail:
+    cleanup_resources(wifi_started);
+    return UMESH_ERR_HARDWARE;
 }
 
 umesh_result_t phy_hal_send(const uint8_t *payload, uint8_t len)
 {
     uint8_t frame[UMESH_MAX_FRAME_SIZE];
+    esp_err_t err;
 
+    if (24u + (uint16_t)len > sizeof(frame)) return UMESH_ERR_TOO_LONG;
     memcpy(frame, S_80211_HDR, 24);
-    esp_wifi_get_mac(WIFI_IF_STA, &frame[10]);
+    err = esp_wifi_get_mac(WIFI_IF_STA, &frame[10]);
+    if (err != ESP_OK) return UMESH_ERR_HARDWARE;
     frame[18] = s_net_id;
     memcpy(&frame[24], payload, len);
 
-    esp_err_t err = esp_wifi_80211_tx(WIFI_IF_STA, frame,
-                                       24 + len, true);
+    err = esp_wifi_80211_tx(WIFI_IF_STA, frame, 24 + len, true);
     return (err == ESP_OK) ? UMESH_OK : UMESH_ERR_HARDWARE;
 }
 
@@ -154,19 +202,7 @@ void phy_hal_set_rx_cb(void (*cb)(const uint8_t *payload,
 
 void phy_hal_deinit(void)
 {
-    esp_wifi_set_promiscuous(false);
-    esp_wifi_stop();
-    esp_wifi_deinit();
-
-    if (s_rx_task) {
-        vTaskDelete(s_rx_task);
-        s_rx_task = NULL;
-    }
-    if (s_rx_queue) {
-        vQueueDelete(s_rx_queue);
-        s_rx_queue = NULL;
-    }
-    s_rx_cb = NULL;
+    cleanup_resources(true);
 }
 
 void phy_hal_delay_ms(uint32_t duration_ms)

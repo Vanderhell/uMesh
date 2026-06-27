@@ -58,9 +58,11 @@ add_executable(test_mac
     ../src/common/crc.c
     ../src/common/ring.c
     ../src/phy/phy.c
+    ../src/power/power.c
     ../src/sec/sec.c
     ../src/sec/keys.c
     ../port/posix/phy_posix.c
+    ../port/posix/power_posix.c
 )
 target_include_directories(test_mac PRIVATE ../src ../include ../port/posix)
 if(UMESH_USE_MICROCRYPT)
@@ -82,9 +84,11 @@ add_executable(test_forwarding
     ../src/common/crc.c
     ../src/common/ring.c
     ../src/phy/phy.c
+    ../src/power/power.c
     ../src/sec/sec.c
     ../src/sec/keys.c
     ../port/posix/phy_posix.c
+    ../port/posix/power_posix.c
 )
 target_include_directories(test_forwarding PRIVATE ../src ../include ../port/posix)
 if(UMESH_USE_MICROCRYPT)
@@ -115,9 +119,11 @@ add_executable(test_net
     ../src/common/crc.c
     ../src/common/ring.c
     ../src/phy/phy.c
+    ../src/power/power.c
     ../src/sec/sec.c
     ../src/sec/keys.c
     ../port/posix/phy_posix.c
+    ../port/posix/power_posix.c
 )
 target_include_directories(test_net PRIVATE ../src ../include ../port/posix)
 if(UMESH_USE_MICROCRYPT)
@@ -165,9 +171,11 @@ add_executable(test_election
     ../src/common/crc.c
     ../src/common/ring.c
     ../src/phy/phy.c
+    ../src/power/power.c
     ../src/sec/sec.c
     ../src/sec/keys.c
     ../port/posix/phy_posix.c
+    ../port/posix/power_posix.c
 )
 target_include_directories(test_election PRIVATE ../src ../include ../port/posix)
 if(UMESH_USE_MICROCRYPT)
@@ -175,6 +183,31 @@ if(UMESH_USE_MICROCRYPT)
     target_link_libraries(test_election PRIVATE microcrypt)
 endif()
 add_test(NAME test_election COMMAND test_election)
+
+add_executable(test_corpus_smoke
+    test_corpus_smoke.c
+    ../src/context.c
+    ../src/net/net.c
+    ../src/net/routing.c
+    ../src/net/discovery.c
+    ../src/mac/mac.c
+    ../src/mac/cca.c
+    ../src/mac/frame.c
+    ../src/common/crc.c
+    ../src/common/ring.c
+    ../src/phy/phy.c
+    ../src/power/power.c
+    ../src/sec/sec.c
+    ../src/sec/keys.c
+    ../port/posix/phy_posix.c
+    ../port/posix/power_posix.c
+)
+target_include_directories(test_corpus_smoke PRIVATE ../src ../include ../port/posix)
+if(UMESH_USE_MICROCRYPT)
+    target_compile_definitions(test_corpus_smoke PRIVATE UMESH_USE_MICROCRYPT=1)
+    target_link_libraries(test_corpus_smoke PRIVATE microcrypt)
+endif()
+add_test(NAME test_corpus_smoke COMMAND test_corpus_smoke)
 
 add_executable(test_gradient
     test_gradient.c
@@ -188,9 +221,11 @@ add_executable(test_gradient
     ../src/common/crc.c
     ../src/common/ring.c
     ../src/phy/phy.c
+    ../src/power/power.c
     ../src/sec/sec.c
     ../src/sec/keys.c
     ../port/posix/phy_posix.c
+    ../port/posix/power_posix.c
 )
 target_include_directories(test_gradient PRIVATE ../src ../include ../port/posix)
 if(UMESH_USE_MICROCRYPT)

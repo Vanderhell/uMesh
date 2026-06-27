@@ -3,6 +3,9 @@
 #include "../context.h"
 #include "../mac/mac.h"
 #include "../mac/frame.h"
+#if UMESH_ENABLE_POWER_MANAGEMENT
+#include "../power/power.h"
+#endif
 #include <stdlib.h>
 #include <string.h>
 
@@ -761,6 +764,23 @@ void discovery_on_frame(const umesh_frame_t *frame, int8_t rssi)
         if (frame->payload_len >= 2) {
             neighbor_update(frame->payload[0], frame->payload[1],
                             rssi, ctx->discovery.now_ms);
+        }
+        break;
+
+    case UMESH_CMD_POWER_BEACON:
+        if (frame->payload_len < 8) break;
+        {
+            uint32_t light_interval = read_u32le(&frame->payload[0]);
+            uint32_t light_window = read_u32le(&frame->payload[4]);
+
+            if (light_interval == 0) break;
+            if (light_window > light_interval) break;
+
+#if UMESH_ENABLE_POWER_MANAGEMENT
+            ctx->net.light_sleep_interval_ms = light_interval;
+            ctx->net.light_listen_window_ms = light_window;
+            power_set_light_profile(light_interval, light_window);
+#endif
         }
         break;
 

@@ -1,6 +1,6 @@
 param(
     [string]$RequestedTag = 'v1.5.0',
-    [string]$ExpectedPackageVersion = '1.4.0'
+    [string]$ExpectedPackageVersion = '1.5.0'
 )
 
 $ErrorActionPreference = 'Stop'

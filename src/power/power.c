@@ -175,13 +175,18 @@ umesh_result_t power_deep_sleep_cycle(umesh_routing_mode_t routing_mode,
     ctx->power.stats.total_sleep_ms += ctx->power.deep_tx_interval_ms;
     if (ctx->power.on_sleep) ctx->power.on_sleep();
     power_hal_deep_sleep(ctx->power.deep_tx_interval_ms);
-    if (ctx->power.on_wake) ctx->power.on_wake();
     return UMESH_OK;
 }
 
 float power_estimate_current_ma(void)
 {
     return estimate_mode_ma(umesh_current_ctx(), umesh_current_ctx()->power.mode);
+}
+
+umesh_result_t power_measure_current_ma(float *out_ma)
+{
+    UMESH_UNUSED(out_ma);
+    return UMESH_ERR_NOT_SUPPORTED;
 }
 
 umesh_power_stats_t power_get_stats(void)
@@ -244,6 +249,12 @@ umesh_result_t power_deep_sleep_cycle(umesh_routing_mode_t routing_mode,
 float power_estimate_current_ma(void)
 {
     return -1.0f;
+}
+
+umesh_result_t power_measure_current_ma(float *out_ma)
+{
+    UMESH_UNUSED(out_ma);
+    return UMESH_ERR_NOT_SUPPORTED;
 }
 
 umesh_power_stats_t power_get_stats(void)

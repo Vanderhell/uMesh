@@ -7,17 +7,10 @@
 
 #include "esp_sleep.h"
 #include "esp_wifi.h"
-#ifdef UMESH_HAS_TWT
-#include "twt_esp32c6.h"
-#endif
 
 void power_hal_light_sleep(uint32_t duration_ms)
 {
-#ifdef UMESH_HAS_TWT
-    if (twt_esp32c6_schedule_ms(duration_ms) == UMESH_OK) {
-        return;
-    }
-#endif
+    (void)duration_ms;
     esp_wifi_set_ps(WIFI_PS_MIN_MODEM);
     esp_sleep_enable_timer_wakeup((uint64_t)duration_ms * 1000ULL);
     esp_light_sleep_start();

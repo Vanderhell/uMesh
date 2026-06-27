@@ -123,7 +123,7 @@ typedef enum {
 
 #define UMESH_CAP_WIFI      (1u << 0)
 #define UMESH_CAP_BT        (1u << 1)
-#define UMESH_CAP_TWT       (1u << 2)
+#define UMESH_CAP_TWT       (1u << 2) /* reserved; not advertised by current builds */
 #define UMESH_CAP_POWER_MGT (1u << 3)
 
 typedef enum {
@@ -185,7 +185,7 @@ typedef struct {
     uint32_t total_sleep_ms;
     uint32_t total_active_ms;
     float    duty_cycle_pct;
-    float    estimated_ma;
+    float    estimated_ma; /* estimated current draw, not a measured hardware value */
 } umesh_power_stats_t;
 
 typedef struct {
@@ -482,6 +482,7 @@ umesh_result_t umesh_set_power_mode_ctx(umesh_ctx_t *ctx, umesh_power_mode_t mod
 umesh_power_mode_t umesh_get_power_mode_ctx(umesh_ctx_t *ctx);
 umesh_result_t umesh_deep_sleep_cycle_ctx(umesh_ctx_t *ctx);
 float umesh_estimate_current_ma_ctx(umesh_ctx_t *ctx);
+umesh_result_t umesh_measure_current_ma_ctx(umesh_ctx_t *ctx, float *out_ma);
 umesh_power_stats_t umesh_get_power_stats_ctx(umesh_ctx_t *ctx);
 umesh_stats_t umesh_get_stats_ctx(umesh_ctx_t *ctx);
 void umesh_tick_ctx(umesh_ctx_t *ctx, uint32_t now_ms);
@@ -516,6 +517,7 @@ umesh_result_t umesh_set_power_mode(umesh_power_mode_t mode);
 umesh_power_mode_t umesh_get_power_mode(void);
 umesh_result_t umesh_deep_sleep_cycle(void);
 float umesh_estimate_current_ma(void);
+umesh_result_t umesh_measure_current_ma(float *out_ma);
 umesh_power_stats_t umesh_get_power_stats(void);
 umesh_stats_t umesh_get_stats(void);
 void umesh_tick(uint32_t now_ms);

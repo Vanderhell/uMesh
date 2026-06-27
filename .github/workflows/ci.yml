@@ -6,30 +6,47 @@ on:
       - master
       - main
   pull_request:
-  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  build-and-test:
+  posix:
+    name: POSIX ${{ matrix.compiler }} ${{ matrix.build_type }} power-${{ matrix.power }} lowmem-${{ matrix.low_memory }} security-${{ matrix.security }}
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
-            cmake_configure_args: >-
-              -DUMESH_PORT=posix
-              -DUMESH_BUILD_TESTS=ON
-              -DCMAKE_BUILD_TYPE=Release
-            cmake_build_args: --parallel
-            ctest_args: --test-dir build --output-on-failure
-          - os: windows-latest
-            cmake_configure_args: >-
-              -DUMESH_PORT=posix
-              -DUMESH_BUILD_TESTS=ON
-            cmake_build_args: --config Release --parallel
-            ctest_args: --test-dir build -C Release --output-on-failure
-
-    runs-on: ${{ matrix.os }}
-
+          - compiler: gcc
+            cxx: g++
+            build_type: Debug
+            power: ON
+            low_memory: OFF
+            security: ON
+          - compiler: gcc
+            cxx: g++
+            build_type: Release
+            power: OFF
+            low_memory: ON
+            security: OFF
+          - compiler: clang
+            cxx: clang++
+            build_type: Debug
+            power: OFF
+            low_memory: OFF
+            security: OFF
+          - compiler: clang
+            cxx: clang++
+            build_type: Release
+            power: ON
+            low_memory: ON
+            security: ON
+    env:
+      CC: ${{ matrix.compiler }}
+      CXX: ${{ matrix.cxx }}
+      CFLAGS: -Wall -Wextra -Wpedantic -Werror
+      CXXFLAGS: -Wall -Wextra -Wpedantic -Werror
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -37,10 +54,97 @@ jobs:
           submodules: recursive
 
       - name: Configure
-        run: cmake -S . -B build ${{ matrix.cmake_configure_args }}
+        run: >
+          cmake -S . -B build
+          -DUMESH_PORT=posix
+          -DUMESH_BUILD_TESTS=ON
+          -DUMESH_ENABLE_POWER_MANAGEMENT=${{ matrix.power }}
+          -DUMESH_LOW_MEMORY=${{ matrix.low_memory }}
+          -DUMESH_USE_MICROCRYPT=${{ matrix.security }}
+          -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
 
       - name: Build
-        run: cmake --build build ${{ matrix.cmake_build_args }}
+        run: cmake --build build --config ${{ matrix.build_type }} --parallel
 
       - name: Test
-        run: ctest ${{ matrix.ctest_args }}
+        run: ctest --test-dir build -C ${{ matrix.build_type }} --output-on-failure
+
+  sanitizers:
+    name: POSIX sanitizer ${{ matrix.sanitizer }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gcc
+            sanitizer: asan
+            cflags: -fsanitize=address -fno-omit-frame-pointer
+            ldflags: -fsanitize=address
+          - compiler: clang
+            sanitizer: ubsan
+            cflags: -fsanitize=undefined -fno-sanitize-recover=all
+            ldflags: -fsanitize=undefined
+    env:
+      CC: ${{ matrix.compiler }}
+      CFLAGS: ${{ matrix.cflags }} -Wall -Wextra -Wpedantic -Werror
+      LDFLAGS: ${{ matrix.ldflags }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DUMESH_PORT=posix
+          -DUMESH_BUILD_TESTS=ON
+          -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        run: cmake --build build --config Debug --parallel
+
+      - name: Test
+        run: ctest --test-dir build -C Debug --output-on-failure
+
+  corpus-smoke:
+    name: Corpus smoke
+    runs-on: ubuntu-latest
+    env:
+      CC: gcc
+      CFLAGS: -Wall -Wextra -Wpedantic -Werror
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: >
+          cmake -S . -B build
+          -DUMESH_PORT=posix
+          -DUMESH_BUILD_TESTS=ON
+          -DCMAKE_BUILD_TYPE=Debug
+
+      - name: Build
+        run: cmake --build build --config Debug --parallel
+
+      - name: Smoke
+        run: ctest --test-dir build -C Debug -R test_corpus_smoke --output-on-failure
+
+  esp32-compile:
+    name: ESP32 compile smoke
+    runs-on: ubuntu-latest
+    container:
+      image: espressif/idf:release-v5.1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build
+        working-directory: port/esp32/smoke
+        run: |
+          idf.py set-target esp32c6
+          idf.py build

@@ -61,7 +61,6 @@
 #define UMESH_RAM_KB        512
 #endif
 #define UMESH_WIFI_GEN      6
-#define UMESH_HAS_TWT       1
 
 #elif defined(CONFIG_IDF_TARGET_ESP32H2)
 #error "ESP32-H2 does not support WiFi. uMesh requires WiFi."

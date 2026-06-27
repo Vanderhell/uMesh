@@ -43,7 +43,7 @@ umesh/
 |   +-- esp32/
 |   |   +-- phy_esp32.c            # raw 802.11, promiscuous mode
 |   |   +-- power_esp32.c          # power HAL
-|   |   +-- twt_esp32c6.c          # C6 TWT stub
+|   |   +-- twt_esp32c6.c          # reserved C6 TWT stub (not advertised)
 |   +-- posix/
 |       +-- phy_posix.c            # simulation for PC tests
 |       +-- power_posix.c          # power simulation
@@ -90,7 +90,7 @@ umesh/
 
 /* ---- Version ------------------------------------------------- */
 #define UMESH_VERSION_MAJOR    1
-#define UMESH_VERSION_MINOR    4
+#define UMESH_VERSION_MINOR    5
 #define UMESH_VERSION_PATCH    0
 
 /* ---- Addresses ----------------------------------------------- */
@@ -387,7 +387,7 @@ ctest --test-dir build --output-on-failure
 - `UMESH_WIFI_GEN`
 - `UMESH_RAM_KB`
 - `UMESH_TX_POWER_MAX`
-- `UMESH_HAS_TWT` (ESP32-C6)
+- `UMESH_CAP_TWT` is reserved and not advertised by current builds
 
 Runtime wrappers are exposed by API:
 - `umesh_get_target()`
@@ -404,6 +404,7 @@ project(umesh C)
 set(CMAKE_C_STANDARD 99)
 option(UMESH_ENABLE_POWER_MANAGEMENT "Enable power management" ON)
 option(UMESH_LOW_MEMORY "Enable reduced-memory profile" OFF)
+option(UMESH_USE_MICROCRYPT "Enable microcrypt-backed security primitives when available" ON)
 
 set(UMESH_SOURCES
     src/umesh.c

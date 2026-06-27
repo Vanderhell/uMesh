@@ -14,7 +14,8 @@ umesh_result_t power_set_mode(umesh_power_mode_t mode);
 umesh_power_mode_t power_get_mode(void);
 umesh_result_t power_deep_sleep_cycle(umesh_routing_mode_t routing_mode,
                                       umesh_role_t role);
-float          power_estimate_current_ma(void);
+float          power_estimate_current_ma(void); /* estimate only */
+umesh_result_t power_measure_current_ma(float *out_ma);
 umesh_power_stats_t power_get_stats(void);
 void           power_set_light_profile(uint32_t interval_ms, uint32_t window_ms);
 void           power_set_deep_interval(uint32_t interval_ms);

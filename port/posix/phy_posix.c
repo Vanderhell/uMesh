@@ -37,7 +37,7 @@ umesh_result_t phy_hal_init(const umesh_phy_cfg_t *cfg)
 umesh_result_t phy_hal_send(const uint8_t *payload, uint8_t len)
 {
     if (!payload || len == 0) return UMESH_ERR_NULL_PTR;
-    if (len > POSIX_LOOPBACK_BUF_SIZE) return UMESH_ERR_TOO_LONG;
+    if ((size_t)len > sizeof(s_loopback_buf)) return UMESH_ERR_TOO_LONG;
 
     /* Store in loopback buffer */
     memcpy(s_loopback_buf, payload, len);

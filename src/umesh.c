@@ -359,6 +359,12 @@ float umesh_estimate_current_ma_ctx(umesh_ctx_t *ctx)
     return umesh_estimate_current_ma();
 }
 
+umesh_result_t umesh_measure_current_ma_ctx(umesh_ctx_t *ctx, float *out_ma)
+{
+    umesh_bind_ctx(ctx_or_default(ctx));
+    return umesh_measure_current_ma(out_ma);
+}
+
 umesh_power_stats_t umesh_get_power_stats_ctx(umesh_ctx_t *ctx)
 {
     umesh_bind_ctx(ctx_or_default(ctx));
@@ -519,7 +525,7 @@ bool umesh_target_supports(uint32_t capability)
 #if UMESH_HAS_BT
     mask |= UMESH_CAP_BT;
 #endif
-#ifdef UMESH_HAS_TWT
+#if defined(UMESH_HAS_TWT) && UMESH_HAS_TWT
     mask |= UMESH_CAP_TWT;
 #endif
 #if UMESH_ENABLE_POWER_MANAGEMENT
@@ -621,6 +627,17 @@ float umesh_estimate_current_ma(void)
     return power_estimate_current_ma();
 #else
     return -1.0f;
+#endif
+}
+
+umesh_result_t umesh_measure_current_ma(float *out_ma)
+{
+#if UMESH_ENABLE_POWER_MANAGEMENT
+    UMESH_UNUSED(out_ma);
+    return power_measure_current_ma(out_ma);
+#else
+    UMESH_UNUSED(out_ma);
+    return UMESH_ERR_NOT_SUPPORTED;
 #endif
 }
 

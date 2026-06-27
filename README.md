@@ -31,11 +31,11 @@ See:
 
 ## Version consistency
 
-**Package / release version currently implemented in code:** `1.4.0` (`src/common/defs.h` defines `UMESH_VERSION_MAJOR/MINOR/PATCH`).
+**Package / release version currently implemented in code:** `1.5.0` (`docs/IMPLEMENTATION.md` mirrors the versioned package metadata).
 `v1.4.0` is historical and remains unchanged.
 
-**Next project release target:** `v1.5.0`
-This target is separate from the wire protocol version and is not created until release gates are green.
+**Release tag prepared in this release:** `v1.5.0`
+This tag is separate from the wire protocol version and from compatibility wrappers.
 
 **Wire protocol version:** `UMESH_WIRE_VERSION` in `include/umesh.h`
 This field is independent from the package/release tag.
