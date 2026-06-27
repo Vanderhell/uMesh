@@ -11,14 +11,6 @@
 #define UMESH_JOIN_RETRY_MS 1000u
 #define UMESH_ELECTION_RESULT_ANNOUNCE_MS 1000u
 
-static void write_u32le(uint8_t out[4], uint32_t value)
-{
-    out[0] = (uint8_t)(value & 0xFFu);
-    out[1] = (uint8_t)((value >> 8) & 0xFFu);
-    out[2] = (uint8_t)((value >> 16) & 0xFFu);
-    out[3] = (uint8_t)((value >> 24) & 0xFFu);
-}
-
 static uint16_t next_seq(umesh_ctx_t *ctx)
 {
     ctx->net.seq_num = (uint16_t)((ctx->net.seq_num + 1u) & 0x0FFF);
@@ -586,6 +578,8 @@ void net_tick(uint32_t now_ms)
             ctx->net.power_mode != UMESH_POWER_ACTIVE &&
             now_ms - ctx->net.last_power_beacon_ms >= UMESH_POWER_BEACON_MS) {
             umesh_frame_t pframe;
+            uint8_t payload[8];
+
             memset(&pframe, 0, sizeof(pframe));
             pframe.wire_version = UMESH_WIRE_VERSION;
             pframe.net_id = ctx->net.net_id;
@@ -598,8 +592,15 @@ void net_tick(uint32_t now_ms)
             pframe.seq_num = next_seq(ctx);
             pframe.hop_count = UMESH_MAX_HOP_COUNT;
             pframe.payload_len = 8;
-            write_u32le(&pframe.payload[0], ctx->net.light_sleep_interval_ms);
-            write_u32le(&pframe.payload[4], ctx->net.light_listen_window_ms);
+            payload[0] = (uint8_t)(ctx->net.light_sleep_interval_ms & 0xFFu);
+            payload[1] = (uint8_t)((ctx->net.light_sleep_interval_ms >> 8) & 0xFFu);
+            payload[2] = (uint8_t)((ctx->net.light_sleep_interval_ms >> 16) & 0xFFu);
+            payload[3] = (uint8_t)((ctx->net.light_sleep_interval_ms >> 24) & 0xFFu);
+            payload[4] = (uint8_t)(ctx->net.light_listen_window_ms & 0xFFu);
+            payload[5] = (uint8_t)((ctx->net.light_listen_window_ms >> 8) & 0xFFu);
+            payload[6] = (uint8_t)((ctx->net.light_listen_window_ms >> 16) & 0xFFu);
+            payload[7] = (uint8_t)((ctx->net.light_listen_window_ms >> 24) & 0xFFu);
+            memcpy(pframe.payload, payload, sizeof(payload));
             mac_send(&pframe);
             ctx->net.last_power_beacon_ms = now_ms;
         }

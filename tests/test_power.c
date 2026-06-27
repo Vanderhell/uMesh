@@ -46,10 +46,12 @@ static void init_umesh(umesh_routing_mode_t routing, umesh_power_mode_t power,
     umesh_start();
 }
 
+#if UMESH_ENABLE_POWER_MANAGEMENT
 static void test_wake_cb(void)
 {
     s_wake_count++;
 }
+#endif
 
 static void test_power_mode_default(void)
 {

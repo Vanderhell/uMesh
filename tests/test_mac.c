@@ -31,7 +31,6 @@ static enum {
     HOOK_BACKOFF_2,
 } s_hook_mode = HOOK_NONE;
 
-static uint32_t s_delay_samples[4];
 static size_t s_delay_sample_count = 0;
 static bool s_sync_ack_injected = false;
 static umesh_frame_t s_expected_req;
@@ -165,7 +164,8 @@ static void test_rx_cb(umesh_frame_t *frame, int8_t rssi)
 
 static void delay_hook_common(uint32_t duration_ms)
 {
-    s_delay_samples[s_delay_sample_count++] = duration_ms;
+    s_delay_sample_count++;
+    (void)duration_ms;
     if (s_hook_mode == HOOK_DELAY_ACK) {
         inject_ack_from_request(&s_expected_req, 0, 0, 0, 0, s_ctx.cfg.security != UMESH_SEC_NONE, false);
     } else if (s_hook_mode == HOOK_DELAY_DUP_ACK) {
