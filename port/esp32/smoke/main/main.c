@@ -2,5 +2,5 @@
 
 void app_main(void)
 {
-    (void)umesh_get_target();
+    (void)sizeof(UMESH_TARGET);
 }
