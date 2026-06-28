@@ -1,4 +1,5 @@
 #include "../../src/power/power_hal.h"
+#include "../../include/umesh_caps.h"
 #if UMESH_ENABLE_POWER_MANAGEMENT
 
 #if !UMESH_HAS_WIFI
