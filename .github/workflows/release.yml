@@ -26,11 +26,25 @@ jobs:
 
       - name: Create GitHub release
         if: steps.release.outputs.exists == 'false'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create v1.5.0 \
-            --verify-tag \
-            --title "uMesh v1.5.0" \
-            --notes "Verified release of uMesh v1.5.0. Changes are limited to the locally verified implementation, CI, and release-prep work in this repository." \
-          || gh release view v1.5.0 >/dev/null 2>&1
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = 'v1.5.0';
+            const { owner, repo } = context.repo;
+            try {
+              await github.rest.repos.getReleaseByTag({ owner, repo, tag });
+              core.info(`Release ${tag} already exists.`);
+            } catch (error) {
+              if (error.status !== 404) {
+                throw error;
+              }
+              await github.rest.repos.createRelease({
+                owner,
+                repo,
+                tag_name: tag,
+                name: 'uMesh v1.5.0',
+                body: 'Verified release of uMesh v1.5.0. Changes are limited to the locally verified implementation, CI, and release-prep work in this repository.',
+                draft: false,
+                prerelease: false,
+              });
+            }
