@@ -25,3 +25,4 @@ tests/hardware/runner/.vendor/
 # Generated firmware exports (not tracked)
 tests/hardware/firmware/**/_u_*.c
 /prompts
+/prompts
