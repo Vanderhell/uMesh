@@ -2,6 +2,21 @@
 
 This project implements cryptographic mechanisms, but this repository does **not** include an independent security audit report. Treat the security properties described here as **implementation notes**, not as a guarantee of real-world resistance.
 
+## Reporting security issues
+
+Use the `security_report.yml` issue form in `.github/ISSUE_TEMPLATE/` and include:
+
+- commit SHA
+- platform
+- compiler/toolchain
+- exact command
+- expected behavior
+- actual behavior
+- logs
+- host-simulated vs ESP32 compile vs real hardware
+
+Do not publish exploit details publicly before triage when the issue may affect users.
+
 ## Implemented (code-visible)
 
 Implemented in `src/sec/`:
@@ -47,4 +62,4 @@ See `VERIFICATION.md` for what was tested in this run.
 
 ## Reporting security issues
 
-If you discover a vulnerability, open a GitHub issue or (preferably) provide a minimal reproduction and affected commit/versions.
+If you discover a vulnerability, use the security report template and provide a minimal reproduction and affected commit/versions.

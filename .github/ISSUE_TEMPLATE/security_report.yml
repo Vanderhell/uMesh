@@ -1,0 +1,68 @@
+name: Security report
+description: Report a potential security issue privately for triage.
+title: "[security]: "
+labels:
+  - security
+body:
+  - type: input
+    id: commit_sha
+    attributes:
+      label: Commit SHA
+      description: The exact commit you tested or reviewed.
+      placeholder: "e.g. f1a4fdf"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: Where did the issue appear?
+      options:
+        - Host-simulated
+        - ESP32 compile/integration
+        - Real hardware
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: toolchain
+    attributes:
+      label: Compiler / toolchain
+      placeholder: "e.g. GCC 14, clang-cl, ESP-IDF 5.1"
+    validations:
+      required: false
+  - type: input
+    id: command
+    attributes:
+      label: Exact command
+      description: Include the exact command if the issue can be reproduced locally.
+      placeholder: "e.g. ctest --test-dir build-security --output-on-failure"
+    validations:
+      required: false
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / reproduction
+      description: Include reproduction steps, logs, and any relevant commit range.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Disclosure notes
+      description: Mention whether the issue was found on host simulation, ESP32 compile/integration, or real hardware.
+    validations:
+      required: false

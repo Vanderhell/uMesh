@@ -1,0 +1,65 @@
+name: Verification failure
+description: Report a failed documented build or test gate.
+title: "[verification]: "
+labels:
+  - verification
+body:
+  - type: input
+    id: commit_sha
+    attributes:
+      label: Commit SHA
+      placeholder: "e.g. f1a4fdf"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: Which verification category failed?
+      options:
+        - Host-simulated
+        - CI
+        - ESP32 compile/integration
+        - Real hardware
+    validations:
+      required: true
+  - type: input
+    id: toolchain
+    attributes:
+      label: Compiler / toolchain
+      placeholder: "e.g. GCC 14, clang-cl, ESP-IDF 5.1"
+    validations:
+      required: false
+  - type: input
+    id: cmake_options
+    attributes:
+      label: CMake / options
+      placeholder: "e.g. -DUMESH_LOW_MEMORY=ON"
+    validations:
+      required: false
+  - type: input
+    id: command
+    attributes:
+      label: Exact command
+      placeholder: "e.g. ctest --test-dir build-debug -C Debug --output-on-failure"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      render: shell
+    validations:
+      required: true

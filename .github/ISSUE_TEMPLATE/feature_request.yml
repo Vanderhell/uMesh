@@ -1,0 +1,70 @@
+name: Feature request
+description: Suggest a new capability or a documentation/community improvement.
+title: "[feature]: "
+labels:
+  - enhancement
+body:
+  - type: input
+    id: commit_sha
+    attributes:
+      label: Commit SHA
+      description: The base commit for the request.
+      placeholder: "e.g. f1a4fdf"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: If you have a specific target in mind, pick one.
+      options:
+        - Host-simulated
+        - ESP32 compile/integration
+        - Real hardware
+        - All platforms
+    validations:
+      required: true
+  - type: input
+    id: toolchain
+    attributes:
+      label: Compiler / toolchain
+      placeholder: "e.g. GCC 14, clang-cl, ESP-IDF 5.1"
+    validations:
+      required: false
+  - type: input
+    id: cmake_options
+    attributes:
+      label: CMake / options
+      description: Fill this in if the request depends on build flags or configuration.
+      placeholder: "e.g. -DUMESH_ENABLE_POWER_MANAGEMENT=ON"
+    validations:
+      required: false
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What should the project do after this change?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What does the project do today, if anything?
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or evidence
+      description: Include logs, screenshots, or references that motivate the request.
+      render: shell
+    validations:
+      required: false
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Mention whether this is host-simulated, ESP32 compile/integration, or real hardware.
+    validations:
+      required: false

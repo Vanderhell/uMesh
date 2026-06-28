@@ -1,0 +1,78 @@
+name: Bug report
+description: Report a bug, regression, or unexpected behavior.
+title: "[bug]: "
+labels:
+  - bug
+body:
+  - type: input
+    id: commit_sha
+    attributes:
+      label: Commit SHA
+      description: The exact commit you tested.
+      placeholder: "e.g. f1a4fdf"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      description: Where did this happen?
+      options:
+        - Host-simulated
+        - ESP32 compile/integration
+        - Real hardware
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: toolchain
+    attributes:
+      label: Compiler / toolchain
+      placeholder: "e.g. MSVC 19.4, clang-cl, GCC 14, ESP-IDF 5.1"
+    validations:
+      required: true
+  - type: input
+    id: cmake_options
+    attributes:
+      label: CMake / options
+      description: Fill this in if the issue depends on build flags or configuration.
+      placeholder: "e.g. -DUMESH_PORT=posix -DUMESH_USE_MICROCRYPT=OFF"
+    validations:
+      required: false
+  - type: input
+    id: command
+    attributes:
+      label: Exact command
+      description: Include the exact command that triggered the issue, if relevant.
+      placeholder: "e.g. ctest --test-dir build-release -C Release --output-on-failure"
+    validations:
+      required: false
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: What happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Paste the relevant logs, error messages, or failure output.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Mention whether this is host-simulated, ESP32 compile/integration, or real hardware.
+    validations:
+      required: false

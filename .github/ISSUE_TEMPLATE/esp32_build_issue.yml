@@ -1,0 +1,73 @@
+name: ESP32 build issue
+description: Report an ESP32 compile or integration problem.
+title: "[esp32]: "
+labels:
+  - esp32
+  - build
+body:
+  - type: input
+    id: commit_sha
+    attributes:
+      label: Commit SHA
+      placeholder: "e.g. f1a4fdf"
+    validations:
+      required: true
+  - type: input
+    id: target
+    attributes:
+      label: ESP32 target
+      description: The target you tried to build for.
+      placeholder: "e.g. esp32c6"
+    validations:
+      required: true
+  - type: input
+    id: toolchain
+    attributes:
+      label: Compiler / SDK
+      placeholder: "e.g. ESP-IDF 5.1, Arduino-ESP32 3.x"
+    validations:
+      required: true
+  - type: input
+    id: cmake_options
+    attributes:
+      label: CMake / options
+      placeholder: "e.g. -DUMESH_PORT=esp32"
+    validations:
+      required: false
+  - type: input
+    id: command
+    attributes:
+      label: Exact command
+      placeholder: "e.g. idf.py build"
+    validations:
+      required: true
+  - type: dropdown
+    id: verification_mode
+    attributes:
+      label: Verification mode
+      description: How far did you get?
+      options:
+        - Host-simulated
+        - ESP32 compile/integration
+        - Real hardware
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      render: shell
+    validations:
+      required: true

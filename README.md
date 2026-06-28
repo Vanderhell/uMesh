@@ -52,7 +52,11 @@ This repository (and this run) does not provide measured evidence for radio rang
 
 ## Documentation index
 
+- `docs/COOKBOOK.md`
 - `docs/API_REFERENCE.md`
+- `docs/KNOWN_LIMITATIONS.md`
+- `CONTRIBUTING.md`
+- `SUPPORT.md`
 - `docs/SECURITY_LAYER.md`
 - `docs/PHYSICAL_LAYER.md`
 - `docs/MAC_LAYER.md`
